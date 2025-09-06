@@ -193,6 +193,13 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
         return {"labels": [], "series": []}
 
     historic_dates = sorted(bucket_dates_set)
+    # Extend to current bucket (today) so chart shows inactivity plateau
+    today_bucket = bucket_start(_dt.datetime.now())
+    if historic_dates and historic_dates[-1] < today_bucket:
+        cur_ext = historic_dates[-1]
+        while cur_ext < today_bucket:
+            cur_ext = next_bucket(cur_ext)
+            historic_dates.append(cur_ext)
     historic_labels = [label_from_date(d) for d in historic_dates]
 
     series = []
@@ -277,6 +284,9 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
             future_dates.append(cur)
         full_labels = historic_labels + [label_from_date(d) for d in future_dates]
 
+    # Global max total cards for Y-axis scaling
+    global_max_total = max(template_total_cards.values()) if template_total_cards else 0
+
     # Compose series entries with forecast metadata
     for ord_, total_cards in template_total_cards.items():
         running = 0
@@ -287,12 +297,14 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
         if not hist_data:
             continue
         label_name = template_name_cache.get(ord_, f"Template {ord_+1}")
-        entry: Dict[str, Any] = {"label": label_name, "data": hist_data}
+        entry: Dict[str, Any] = {"label": label_name, "data": hist_data, "totalCards": total_cards}
         if forecast and ord_ in forecast_data_cache:
             fc = forecast_data_cache[ord_]
             # Pad to full length with None so forecast line stops after completion
             if len(fc) < len(full_labels):
                 fc = fc + [None] * (len(full_labels) - len(fc))
+            # Clamp any forecast overshoot to totalCards
+            fc = [min(v, total_cards) if isinstance(v, int) and v is not None else v for v in fc]
             # Determine completion index inside padded array: first index where value >= total_cards
             completion_idx = None
             for i, v in enumerate(fc):
@@ -307,4 +319,4 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
                 entry["forecastCompletionDate"] = full_labels[completion_idx]
         series.append(entry)
 
-    return {"labels": full_labels, "series": series}
+    return {"labels": full_labels, "series": series, "yMaxTotal": global_max_total}

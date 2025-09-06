@@ -110,6 +110,13 @@ def learning_history(model_id: Optional[int], template_ords: Optional[List[int]]
     if not bucket_dates:
         return {"labels": [], "series": []}
     dates_sorted = sorted(bucket_dates)
+    # extend to today bucket to show inactivity plateau
+    today_b = _bucket_start(_dt.datetime.now(), granularity)
+    if dates_sorted and dates_sorted[-1] < today_b:
+        cur = dates_sorted[-1]
+        while cur < today_b:
+            cur = _next_bucket(cur, granularity)
+            dates_sorted.append(cur)
     labels = [_label_from_date(d, granularity) for d in dates_sorted]
     series = []
     # template names
@@ -227,6 +234,11 @@ def time_spent_stats(model_id: Optional[int], template_ords: Optional[List[int]]
             for t in m.get('tmpls', []):  # type: ignore
                 name_cache[t.get('ord')] = t.get('name') or f"Card {t.get('ord',0)+1}"
     bucket_labels = [b[2] for b in TIME_BUCKETS]
+    # extend label continuity for inactivity (no date labels here; not needed)
+    max_b = max(1, len(bucket_labels))
+    today_b = _bucket_start(_dt.datetime.now(), "seconds")
+    arr = [0]*max_b
+    arr[-1] = 1
     per_template_bucket: Dict[int, List[int]] = {}
     top_cards: Dict[int, List[dict]] = {}
     per_template_times: Dict[int,List[Tuple[int,float]]] = {}
@@ -237,7 +249,7 @@ def time_spent_stats(model_id: Optional[int], template_ords: Optional[List[int]]
             if lo <= total_sec < hi:
                 label_index = i
                 break
-        arr = per_template_bucket.setdefault(c.ord, [0]*len(TIME_BUCKETS))
+        arr = per_template_bucket.setdefault(c.ord, [0]*max_b)
         arr[label_index] += 1
         per_template_times.setdefault(c.ord, []).append((c.id, total_sec))
     for ord_, lst in per_template_times.items():

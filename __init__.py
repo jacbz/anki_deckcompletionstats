@@ -200,6 +200,13 @@ def build_state_json() -> str:
             {"ord": t.get("ord"), "name": t.get("name") or f"Card {t.get('ord', 0)+1}"}
             for t in tmpls
         ]
+        # Add field names for UI display
+        try:
+            mdl = next((m for m in list_models() if m.get("id") == mid), None)
+            if mdl:
+                state["fieldNames"] = [f.get("name", "") for f in mdl.get("flds", [])]
+        except Exception:
+            state["fieldNames"] = []
         sel = get_selected_template_ords()
         if sel is not None:
             state["selectedTemplates"] = sel

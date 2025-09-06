@@ -121,7 +121,7 @@ function renderLineChart(targetId, dataset, percent=false) {
   const labels = dataset.labels || [];
   const series = dataset.series || [];
   const ds = series.map((s,i)=>({ label: s.label, data: s.data, borderColor: paletteColor(i), backgroundColor: paletteColor(i)+'33', tension:.25, fill:false, pointRadius:2, spanGaps:true }));
-  const options = { responsive:true, plugins:{ legend:{ labels:{ color:'#e6edf3', font:{ size:10 } } } }, scales:{ x:{ ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' } }, y:{ ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' }, suggestedMax: percent?100:undefined, max: percent?100:undefined } } };
+  const options = { responsive:true, plugins:{ legend:{ labels:{ color:'#e6edf3', font:{ size:10 } } } }, scales:{ x:{ ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' } }, y:{ beginAtZero: percent, ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' }, suggestedMax: percent?100:undefined, max: percent?100:undefined } } };
   const cfg = { type:'line', data:{ labels, datasets:ds }, options };
   if (targetId==='statsChart') { statistics5000Chart = ensureChart(statistics5000Chart, ctx, cfg); return statistics5000Chart; }
   if (targetId==='cumulativeFrequencyChart') { cumulativeFrequencyChart = ensureChart(cumulativeFrequencyChart, ctx, cfg); return cumulativeFrequencyChart; }
@@ -133,11 +133,9 @@ function renderProgressChart(progress) {
   if (!ctx || typeof Chart === 'undefined') return;
   const baseLabels = progress.labels || [];
   const datasets = [];
-  let maxY = 0;
+  const globalMax = progress.yMaxTotal || 0;
   const completionAnnotations = [];
   (progress.series || []).forEach((s,i) => {
-    maxY = Math.max(maxY, ...(s.data||[]), ...((s.forecast||[]).filter(v=>typeof v==='number')));
-    // Actual
     datasets.push({
       label: s.label,
       data: s.data.concat(Array(Math.max(0, baseLabels.length - s.data.length)).fill(null)),
@@ -179,8 +177,7 @@ function renderProgressChart(progress) {
       }
     }
   });
-  const ySuggestedMax = maxY + Math.ceil(maxY*0.05);
-  const options = { animation:false, plugins:{ legend:{ labels:{ color:'#e6edf3', font:{ size:10 } } }, annotation:{ annotations: completionAnnotations } }, scales:{ x:{ ticks:{ color:'#9aa2ab', maxRotation:60, autoSkip:true }, grid:{ color:'#30363d' } }, y:{ ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' }, suggestedMax: ySuggestedMax } } };
+  const options = { animation:false, plugins:{ legend:{ labels:{ color:'#e6edf3', font:{ size:10 } } }, annotation:{ annotations: completionAnnotations } }, scales:{ x:{ ticks:{ color:'#9aa2ab', maxRotation:60, autoSkip:true }, grid:{ color:'#30363d' } }, y:{ ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' }, suggestedMax: globalMax, max: globalMax } } };
   const cfg = { type:'line', data:{ labels: baseLabels, datasets }, options };
   statistics5000Chart = ensureChart(statistics5000Chart, ctx, cfg);
 }
@@ -191,8 +188,10 @@ function renderTimeSpent(dataset){
   const labels = dataset.buckets || [];
   const series = dataset.series || [];
   const nameMap = (dataset.templateNames)||{};
-  const ds = series.map((s,i)=>({ label: s.label, data: s.data, backgroundColor: paletteColor(i)+'cc' }));
-  const cfg = { type:'bar', data:{ labels, datasets:ds }, options:{ plugins:{ legend:{ labels:{ color:'#e6edf3', font:{ size:10 } } } }, scales:{ x:{ ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' } }, y:{ ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' } } } } };
+  // Convert seconds to minutes (rounded to 2 decimals)
+  const convSeries = series.map(s=>({ label: s.label, data: (s.data||[]).map(v=> (typeof v==='number'? +(v/60).toFixed(2): v)) }));
+  const ds = convSeries.map((s,i)=>({ label: s.label, data: s.data, backgroundColor: paletteColor(i)+'cc' }));
+  const cfg = { type:'bar', data:{ labels, datasets:ds }, options:{ plugins:{ legend:{ labels:{ color:'#e6edf3', font:{ size:10 } } }, tooltip:{ callbacks:{ label:(ctx)=> `${ctx.dataset.label}: ${ctx.parsed.y} min` } } }, scales:{ x:{ ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' } }, y:{ ticks:{ color:'#9aa2ab', callback:(v)=> v+" min" }, grid:{ color:'#30363d' } } } } };
   timeSpentChart = ensureChart(timeSpentChart, ctx, cfg);
   const wrap = document.getElementById('timeSpentTables');
   if (!wrap) return;
@@ -205,7 +204,7 @@ function renderTimeSpent(dataset){
     const div = document.createElement('div'); div.className='flex-col';
     const h = document.createElement('div'); h.className='template-head'; h.textContent = (nameMap[ord]||('Template '+ord)) + ' (Top Time)'; div.appendChild(h);
     const table = document.createElement('table'); table.className='data-table';
-    table.innerHTML = '<thead><tr><th>Card</th><th>Time</th></tr></thead>';
+    table.innerHTML = '<thead><tr><th>Card</th><th>Time (s)</th></tr></thead>';
     const tb = document.createElement('tbody');
     rows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML = `<td>${r.front}</td><td>${r.timeSec}</td>`; tb.appendChild(tr); });
     table.appendChild(tb); div.appendChild(table); rowContainer.appendChild(div);
@@ -263,6 +262,18 @@ function statistics5000UpdateState(data) {
     if (s.cumulativeFrequency) cumulativeFrequencyChart = renderLineChart('cumulativeFrequencyChart', s.cumulativeFrequency, true);
     if (s.timeSpent) renderTimeSpent(s.timeSpent);
     if (s.difficult) renderDifficult(s.difficult);
+    if (s.fieldNames) {
+      const fi = document.getElementById('fieldInfo');
+      if (fi) {
+        const wordName = (s.wordFieldIndex>=0 && s.fieldNames[s.wordFieldIndex]) ? s.fieldNames[s.wordFieldIndex] : '(n/a)';
+        const rawName = (s.rawFreqFieldIndex>=0 && s.fieldNames[s.rawFreqFieldIndex]) ? s.fieldNames[s.rawFreqFieldIndex] : '(disabled)';
+        const corpusM = typeof s.corpusSizeMillions==='number'? s.corpusSizeMillions.toFixed(3).replace(/\.000$/,'') : '';
+        document.getElementById('wordFieldName').textContent = wordName;
+        document.getElementById('rawFreqFieldName').textContent = rawName;
+        document.getElementById('corpusSizeMillions').textContent = corpusM;
+        fi.style.display = 'block';
+      }
+    }
   } catch (e) { console.error(e); }
 }
 
