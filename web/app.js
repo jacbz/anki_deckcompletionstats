@@ -198,10 +198,31 @@ const app = {
     /**
      * @param {{ord: number, name: string}[]} templates
      * @param {number[]} selected
+     * @param {string} modelName
      */
-    setModelTemplates(templates, selected) {
+    setModelTemplates(templates, selected, modelName) {
       const container = document.querySelector(app.el.modelTemplates);
       if (!container) return;
+      
+      // Check if we're in "Any Model" mode
+      const isAnyModel = modelName === "(Any Model)";
+      
+      // Find the templates group (Card Types section) and hide it in "Any Model" mode
+      try {
+        const templatesGroup = container.closest('.templates-group');
+        if (templatesGroup) {
+          templatesGroup.style.display = isAnyModel ? 'none' : '';
+        }
+      } catch (e) {
+        console.warn('Could not find templates-group:', e);
+      }
+      
+      // If in "Any Model" mode, don't populate the templates
+      if (isAnyModel) {
+        container.innerHTML = "";
+        return;
+      }
+      
       container.innerHTML = "";
       (templates || []).forEach((t) => {
         const wrapper = document.createElement("label");
@@ -599,7 +620,7 @@ const app = {
       });
       // tables (top time cards per template)
       const top = dataset.top || {};
-      const nameMap = dataset.templateNames || {};
+      const histograms = dataset.histograms || {};
       const rowContainer = document.createElement("div");
       rowContainer.className = "flex-row";
       Object.keys(top).forEach((ord) => {
@@ -609,7 +630,9 @@ const app = {
         col.className = "flex-col";
         const h = document.createElement("div");
         h.className = "template-head";
-        h.textContent = nameMap[ord] || "Card " + ord;
+        // Get template name from histograms data instead of templateNames
+        const templateName = histograms[ord] ? histograms[ord].name : `Template ${ord}`;
+        h.textContent = templateName;
         col.appendChild(h);
         const table = document.createElement("table");
         table.className = "data-table";
@@ -1154,18 +1177,11 @@ const app = {
   updateState(s) {
     if (s.granularity) app.state.currentGranularity = s.granularity;
 
-    if ((!s.templates || !s.templates.length) && !app.state.deckPromptShown) {
-      app.state.deckPromptShown = true;
-      setTimeout(() => {
-        this.anki.selectDeck();
-      }, 150);
-    }
-
     if (typeof s.count === "number") this.ui.updateCount(s.count);
     if (s.deckName) this.ui.updateDeckName(s.deckName);
     if (s.modelName) this.ui.updateModelName(s.modelName);
     if (Array.isArray(s.templates))
-      this.ui.setModelTemplates(s.templates, s.selectedTemplates);
+      this.ui.setModelTemplates(s.templates, s.selectedTemplates, s.modelName || "");
 
     if (s.granularity) {
       document

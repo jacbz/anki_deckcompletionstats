@@ -25,6 +25,7 @@ from .analytics import (
     time_studied_history,
 )
 from .data_access import (
+    all_model_templates,
     deck_card_count,
     list_decks,
     list_models,
@@ -42,16 +43,16 @@ def selected_deck_name() -> str:
     """Gets the name of the currently selected deck from config."""
     did = config.get_selected_deck_id()
     if did is None:
-        return "All Decks"
+        return "(All Decks)"
     try:
         deck = mw.col.decks.get(cast(DeckId, did))
         if not deck:
             config.set_selected_deck_id(None)
-            return "All Decks"
+            return "(All Decks)"
         return deck["name"]
     except Exception:
         config.set_selected_deck_id(None)
-        return "All Decks"
+        return "(All Decks)"
 
 
 #
@@ -165,25 +166,80 @@ def build_state_json() -> str:
             state["totalStudiedSeconds"] = 0
 
     else:
-        # Default empty state when no model is selected
+        # Handle "Any Model" case - get templates from all models
+        deck_id = config.get_selected_deck_id()
+        granularity = config.get_granularity()
+
+        # For "Any Model", we don't use template selection filtering
+        # because templates from different models can have conflicting ordinals
+        all_templates_list = all_model_templates(deck_id)
+        
+        # Core data from analytics and data_access modules
         state.update(
             {
-                "progress": {"labels": [], "series": []},
-                "learningHistory": {"labels": [], "series": []},
-                "timeSpent": {"binSize": 15, "labels": [], "histograms": {}, "top": {}},
-                "timeStudied": {"labels": [], "series": []},
-                "difficult": {"byTemplate": {}},
-                "status": {"byTemplate": {}},
-                "completionPercent": 0.0,
-                "studiedCardsCount": 0,
-                "totalStudiedSeconds": 0,
+                "templates": [
+                    {
+                        "ord": t.get("ord"),
+                        "name": t.get("full_name") or f"Card {t.get('ord', 0) + 1}",
+                        "model_id": t.get("model_id"),
+                        "model_name": t.get("model_name"),
+                    }
+                    for t in all_templates_list
+                ],
+                "selectedTemplates": [],  # No template filtering for "Any Model"
+                "progress": template_progress(
+                    None,  # model_id = None for all models
+                    None,  # template_ords = None for all templates
+                    deck_id,
+                    granularity,
+                    forecast=config.is_forecast_enabled(),
+                ),
+                "forecastEnabled": config.is_forecast_enabled(),
+                "learningHistory": learning_history(None, None, deck_id, granularity),
+                "timeSpent": time_spent_stats(None, None, deck_id),
+                "timeStudied": time_studied_history(None, None, deck_id, granularity),
+                "difficult": difficult_cards(None, None, deck_id),
+                "status": template_status_counts(None, None, deck_id),
             }
         )
+
+        # For "Any Model", we can't provide specific field names since they vary by model
+        state["fieldNames"] = []
+
+        # Derived high-level metrics for dashboard KPIs
+        try:
+            progress_series = state.get("progress", {}).get("series", []) or []
+            studied_sum = sum(
+                s.get("data", [])[-1] for s in progress_series if s.get("data")
+            )
+            total_sum = sum(s.get("totalCards", 0) for s in progress_series)
+
+            state["completionPercent"] = (
+                round(studied_sum / total_sum * 100, 1) if total_sum > 0 else 0.0
+            )
+            state["studiedCardsCount"] = studied_sum
+            state["totalStudiedSeconds"] = int(
+                state.get("timeStudied", {}).get("totalSecondsAll", 0)
+            )
+        except (IndexError, TypeError, ZeroDivisionError):
+            state["completionPercent"] = 0.0
+            state["studiedCardsCount"] = 0
+            state["totalStudiedSeconds"] = 0
     return json.dumps(state)
 
 
 def load_web_content(dialog: QDialog) -> None:
     """Loads the initial HTML and injects the dynamic state."""
+    # Check if both All Decks and Any Model are selected - this combination
+    # can cause the app to freeze for minutes due to massive data loading
+    if config.get_selected_deck_id() is None and config.get_selected_model_id() is None:
+        # Show deck selection prompt immediately before any data loading
+        choose_deck_on_startup()
+        # After deck selection, check again - if user cancelled, close dialog
+        if config.get_selected_deck_id() is None:
+            dialog.close()
+            return
+    
     web: AnkiWebView = dialog._web  # type: ignore[attr-defined]
     addon_dir = Path(__file__).resolve().parent
     index_path = addon_dir / "web" / "index.html"
@@ -272,7 +328,7 @@ def choose_deck() -> None:
         return
 
     decks = sorted(list_decks(), key=lambda x: x[1].lower())
-    names = ["All Decks"] + [name for _, name in decks]
+    names = ["(All Decks)"] + [name for _, name in decks]
     current_name = selected_deck_name()
     current_index = names.index(current_name) if current_name in names else 0
 
@@ -282,7 +338,7 @@ def choose_deck() -> None:
     if not ok:
         return
 
-    if name == "All Decks":
+    if name == "(All Decks)":
         config.set_selected_deck_id(None)
         config.set_selected_model_id(None)
     else:
@@ -290,41 +346,6 @@ def choose_deck() -> None:
         chosen_deck_id = next((did for did, dname in decks if dname == name), None)
         if chosen_deck_id:
             config.set_selected_deck_id(chosen_deck_id)
-            # Auto-select the most common model in the deck
-            auto_select_model_for_deck(chosen_deck_id)
-
-
-def auto_select_model_for_deck(deck_id: int) -> None:
-    """
-    Finds the most common notetype in a given deck and sets it in config.
-    If no cards are in the deck, it clears the model selection.
-    """
-    if not mw.col:
-        return
-    try:
-        deck_obj = mw.col.decks.get(cast(DeckId, deck_id))
-        if not deck_obj:
-            return
-        # Anki queries need deck names, with quotes escaped
-        deck_name = deck_obj["name"].replace('"', '\\"')
-        cids = mw.col.find_cards(f'deck:"{deck_name}"')
-        if cids:
-            # A simple heuristic: just use the model of the first card.
-            # A more robust approach might count model occurrences.
-            card = mw.col.get_card(cids[0])
-            note = card.note()
-            mid = getattr(note, "mid", None)
-            if mid is None:  # Fallback for older Anki versions
-                nt = getattr(note, "note_type", lambda: None)()
-                mid = nt.get("id") if nt else None
-            if mid is not None:
-                config.set_selected_model_id(mid)
-        else:
-            # No cards in deck, so no model to select
-            config.set_selected_model_id(None)
-    except Exception:
-        # On any error, revert to a safe default
-        config.set_selected_model_id(None)
 
 
 def choose_model() -> None:
@@ -336,7 +357,7 @@ def choose_model() -> None:
         [(m.get("id"), m.get("name", "(Unnamed)")) for m in list_models()],
         key=lambda x: x[1].lower(),
     )
-    names = [name for _, name in models]
+    names = ["(Any Model)"] + [name for _, name in models]
     current_mid = config.get_selected_model_id()
     current_name = next(
         (name for mid, name in models if mid == current_mid), "(Any Model)"
@@ -349,11 +370,39 @@ def choose_model() -> None:
     if not ok:
         return
 
-    chosen_model_id = next((mid for mid, name in models if name == sel), None)
-    if chosen_model_id:
-        config.set_selected_model_id(chosen_model_id)
+    if sel == "(Any Model)":
+        config.set_selected_model_id(None)
+    else:
+        chosen_model_id = next((mid for mid, name in models if name == sel), None)
+        if chosen_model_id:
+            config.set_selected_model_id(chosen_model_id)
 
     # No need to manually refresh here, on_js_message handles it
+
+
+def choose_deck_on_startup() -> None:
+    """Shows a startup dialog to let the user select a specific deck to avoid performance issues."""
+    if not mw.col:
+        return
+    
+    decks = sorted(list_decks(), key=lambda x: x[1].lower())
+    names = [name for _, name in decks]  # Don't include "(All Decks)" option
+    
+    if not names:
+        # No decks available
+        showInfo("No decks found in your collection.", title=ADDON_NAME)
+        return
+
+    name, ok = QInputDialog.getItem(
+        mw, ADDON_NAME, "Select a deck to analyze:", names, 0, False
+    )
+    if not ok:
+        return
+
+    # Find the deck ID from the selected name
+    chosen_deck_id = next((did for did, dname in decks if dname == name), None)
+    if chosen_deck_id:
+        config.set_selected_deck_id(chosen_deck_id)
 
 
 #
@@ -372,3 +421,6 @@ def setup() -> None:
 
 # Run setup
 setup()
+
+ADDON_NAME = "Deck Completion Stats"
+ADDON_MODULE = __name__.split(".")[0]

@@ -67,6 +67,60 @@ def model_templates(model_id: int) -> list[dict[str, Any]]:
     return m.get("tmpls", [])  # type: ignore[return-value]
 
 
+def all_model_templates(deck_id: Optional[int] = None) -> list[dict[str, Any]]:
+    """Return the list of templates from all models that have cards in the specified deck."""
+    if not mw.col:
+        return []
+    
+    # Get cards from the specified deck (or all cards if deck_id is None)
+    if deck_id is not None:
+        deck = mw.col.decks.get(cast(DeckId, deck_id))
+        if not deck:
+            return []
+        deck_name = deck["name"].replace('"', '\\"')
+        query = f'deck:"{deck_name}"'
+        card_ids = mw.col.find_cards(query)
+    else:
+        card_ids = mw.col.find_cards("")
+    
+    if not card_ids:
+        return []
+    
+    # Get unique model IDs from the cards in the deck
+    cards = [mw.col.get_card(cid) for cid in card_ids]
+    note_ids = list(set(card.nid for card in cards))
+    
+    # Get models used by these notes
+    model_ids_in_deck = set()
+    for nid in note_ids:
+        note = mw.col.get_note(nid)
+        model_ids_in_deck.add(note.mid)
+    
+    # Get templates only for models that have cards in this deck
+    all_templates = []
+    for model_id in model_ids_in_deck:
+        model = get_model(model_id)
+        if model:
+            model_name = model.get("name", "(Unnamed)")
+            templates = model_templates(model_id)
+            
+            # Check which templates actually have cards in this deck
+            for template in templates:
+                template_ord = template.get("ord")
+                if template_ord is not None:
+                    # Check if this template has any cards in the deck
+                    template_cards = [c for c in cards if c.note().mid == model_id and c.ord == template_ord]
+                    if template_cards:  # Only include templates that have cards
+                        template_with_model = template.copy()
+                        template_with_model["model_id"] = model_id
+                        template_with_model["model_name"] = model_name
+                        template_name = template.get("name", f"Card {template_ord + 1}")
+                        template_with_model["full_name"] = f"{model_name}: {template_name}"
+                        all_templates.append(template_with_model)
+    
+    return all_templates
+
+
 def model_name(model_id: Optional[int]) -> str:
     """Return the name of a model, or a placeholder if not found."""
     if model_id is None:
@@ -190,7 +244,7 @@ class _TimeBucketer:
 
 
 def _calculate_historic_progress(
-    cards: list[Card], first_map: dict[int, int], bucketer: _TimeBucketer
+    cards: list[Card], first_map: dict[int, int], bucketer: _TimeBucketer, model_id: Optional[int] = None
 ) -> tuple[dict, dict, list, list]:
     """Aggregate historical card study counts into time buckets."""
     per_template_counts: Dict[int, Dict[str, int]] = {}
@@ -198,7 +252,8 @@ def _calculate_historic_progress(
     bucket_dates_set: set[_dt.date] = set()
 
     for c in cards:
-        template_total_cards[c.ord] = template_total_cards.get(c.ord, 0) + 1
+        template_key = _get_template_key(c, model_id)
+        template_total_cards[template_key] = template_total_cards.get(template_key, 0) + 1
         rid = first_map.get(c.id)
         if not rid:
             continue  # not studied yet
@@ -206,7 +261,7 @@ def _calculate_historic_progress(
         bdate = bucketer.bucket_start(dt)
         bucket_dates_set.add(bdate)
         label = bucketer.label_from_date(bdate)
-        tdict = per_template_counts.setdefault(c.ord, {})
+        tdict = per_template_counts.setdefault(template_key, {})
         tdict[label] = tdict.get(label, 0) + 1
 
     if not bucket_dates_set:
@@ -347,7 +402,6 @@ def template_progress(
 
     cids = [c.id for c in cards]
     first_map = _get_first_review_timestamps(cids)
-    template_name_cache = _get_template_names(model_id)
     bucketer = _TimeBucketer(granularity)
 
     (
@@ -355,7 +409,7 @@ def template_progress(
         template_total_cards,
         historic_dates,
         historic_labels,
-    ) = _calculate_historic_progress(cards, first_map, bucketer)
+    ) = _calculate_historic_progress(cards, first_map, bucketer, model_id)
 
     if not historic_dates:
         return {"labels": [], "series": []}
@@ -366,7 +420,8 @@ def template_progress(
         rid = first_map.get(c.id)
         if rid:
             dt_date = _dt.datetime.fromtimestamp(rid / 1000).date()
-            template_review_dates.setdefault(c.ord, []).append(dt_date)
+            template_key = _get_template_key(c, model_id)
+            template_review_dates.setdefault(template_key, []).append(dt_date)
 
     studied_dates_iso_map: Dict[int, List[str]] = {
         ord_: sorted([d.isoformat() for d in dlist])
@@ -419,7 +474,7 @@ def template_progress(
             continue
 
         entry: Dict[str, Any] = {
-            "label": template_name_cache.get(ord_, f"Template {ord_+1}"),
+            "label": _get_template_name_for_key(ord_, model_id),
             "data": hist_data,
             "totalCards": total_cards,
             "studiedDates": studied_dates_iso_map.get(ord_, []),
@@ -507,8 +562,6 @@ def template_status_counts(
     if not cards:
         return {"byTemplate": {}}
 
-    name_map = _get_template_names(model_id)
-
     by_t: Dict[int, Dict[str, int]] = {}
     for c in cards:
         st = c.type  # 0 new, 1 learn, 2 review, 3 relearn
@@ -519,11 +572,100 @@ def template_status_counts(
         else:
             key = "review"
 
-        bucket = by_t.setdefault(c.ord, {"new": 0, "learning": 0, "review": 0})
+        template_key = _get_template_key(c, model_id)
+        bucket = by_t.setdefault(template_key, {"new": 0, "learning": 0, "review": 0})
         bucket[key] = bucket.get(key, 0) + 1
 
     out: Dict[int, Dict[str, Any]] = {
-        ord_: {"name": name_map.get(ord_, f"Card {ord_+1}"), **counts}
-        for ord_, counts in by_t.items()
+        template_key: {"name": _get_template_name_for_key(template_key, model_id), **counts}
+        for template_key, counts in by_t.items()
     }
     return {"byTemplate": out}
+
+
+def _get_cards_for_multi_model_analysis(
+    deck_id: Optional[int],
+    model_template_pairs: Optional[list[tuple[int, int]]],
+) -> list[Card]:
+    """Fetch cards based on specific (model_id, template_ord) pairs."""
+    if not mw.col:
+        return []
+
+    parts: list[str] = []
+    if deck_id is not None:
+        deck = mw.col.decks.get(cast(DeckId, deck_id))
+        if deck:
+            dn = deck["name"].replace('"', '\\"')
+            parts.append(f'deck:"{dn}"')
+    
+    query = " ".join(parts) if parts else ""
+    cids = mw.col.find_cards(query) if query else mw.col.find_cards("")
+    if not cids:
+        return []
+
+    cards = [mw.col.get_card(cid) for cid in cids]
+    
+    if model_template_pairs is not None:
+        # Filter cards to only include those matching the specified (model_id, template_ord) pairs
+        filtered_cards = []
+        for card in cards:
+            note = card.note()
+            card_model_id = note.mid
+            card_template_ord = card.ord
+            
+            for model_id, template_ord in model_template_pairs:
+                if card_model_id == model_id and card_template_ord == template_ord:
+                    filtered_cards.append(card)
+                    break
+        return filtered_cards
+
+    return cards
+
+
+def _get_template_key(card: Card, model_id: Optional[int]) -> int:
+    """
+    Get a unique key for template grouping.
+    
+    Args:
+        card: The card to get the template key for
+        model_id: The model ID filter (None for "Any Model" mode)
+    
+    Returns:
+        A unique integer key for template grouping
+    """
+    if model_id is not None:
+        # Single model case - use simple ordinal
+        return card.ord
+    else:
+        # Multiple models case - create unique key by combining model_id and ord
+        note = card.note()
+        return note.mid * 1000 + card.ord  # Assuming max 1000 templates per model
+
+
+def _get_template_name_for_key(template_key: int, model_id: Optional[int]) -> str:
+    """
+    Get the display name for a template key.
+    
+    Args:
+        template_key: The template key from _get_template_key
+        model_id: The model ID filter (None for "Any Model" mode)
+    
+    Returns:
+        Display name for the template
+    """
+    if model_id is not None:
+        # Single model case - use simple template name
+        template_names = _get_template_names(model_id)
+        return template_names.get(template_key, f"Card {template_key + 1}")
+    else:
+        # Multiple models case - decode the key and create full name
+        decoded_model_id = template_key // 1000
+        decoded_ord = template_key % 1000
+        
+        model = get_model(decoded_model_id)
+        model_name = model.get("name", "(Unnamed)") if model else "(Unknown Model)"
+        
+        template_names = _get_template_names(decoded_model_id)
+        template_name = template_names.get(decoded_ord, f"Card {decoded_ord + 1}")
+        
+        return f"{model_name}: {template_name}"

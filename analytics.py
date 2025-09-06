@@ -15,6 +15,8 @@ from anki.models import NotetypeId
 from anki.notes import Note
 from aqt import mw
 
+from .data_access import _get_template_key, _get_template_name_for_key
+
 # Constants for time spent histogram
 HIST_BIN_SIZE = 15  # seconds
 HIST_MAX_CAP = 450  # seconds
@@ -242,7 +244,8 @@ def learning_history(
         bucket_dates.add(bucket_date)
         label = _label_from_date(bucket_date, granularity)
 
-        template_buckets = cards_per_template_bucket.setdefault(card.ord, {})
+        template_key = _get_template_key(card, model_id)
+        template_buckets = cards_per_template_bucket.setdefault(template_key, {})
         template_buckets[label] = template_buckets.get(label, 0) + 1
 
     if not bucket_dates:
@@ -259,15 +262,14 @@ def learning_history(
 
     labels = [_label_from_date(d, granularity) for d in dates_sorted]
     series = []
-    template_name_map = _get_template_name_map(model_id)
 
-    for ordinal in sorted(cards_per_template_bucket.keys()):
+    for template_key in sorted(cards_per_template_bucket.keys()):
         data = [
-            cards_per_template_bucket.get(ordinal, {}).get(label, 0) for label in labels
+            cards_per_template_bucket.get(template_key, {}).get(label, 0) for label in labels
         ]
         series.append(
             {
-                "label": template_name_map.get(ordinal, f"Template {ordinal + 1}"),
+                "label": _get_template_name_for_key(template_key, model_id),
                 "data": data,
             }
         )
@@ -298,7 +300,7 @@ def time_spent_stats(
         "labels": [],
         "histograms": {},
         "top": {},
-        "templateNames": template_name_map,
+        "templateNames": {},
     }
 
     if not cards or not mw.col or not mw.col.db:
@@ -314,7 +316,8 @@ def time_spent_stats(
     global_max_time = 0.0
     for card in cards:
         total_time = total_time_map.get(card.id, 0.0)
-        per_template_times.setdefault(card.ord, []).append((card.id, total_time))
+        template_key = _get_template_key(card, model_id)
+        per_template_times.setdefault(template_key, []).append((card.id, total_time))
         if total_time > global_max_time:
             global_max_time = total_time
 
@@ -341,7 +344,7 @@ def time_spent_stats(
         seconds = int(secs % 60)
         return f"{minutes:02d}:{seconds:02d}"
 
-    for ordinal, time_list in per_template_times.items():
+    for template_key, time_list in per_template_times.items():
         counts = [0] * bin_count
         for _, secs in time_list:
             if has_overflow and secs >= HIST_MAX_CAP:
@@ -365,18 +368,23 @@ def time_spent_stats(
             if len(display) > 60:
                 display = display[:57] + "…"
             rows.append({"cid": cid, "front": display, "timeSec": _format_mmss(secs)})
-        top_cards[ordinal] = rows
-        histograms[ordinal] = {
-            "name": template_name_map.get(ordinal, f"Card {ordinal + 1}"),
+        top_cards[template_key] = rows
+        histograms[template_key] = {
+            "name": _get_template_name_for_key(template_key, model_id),
             "counts": counts,
         }
+
+    # Create template names map using the new helper function
+    template_names = {}
+    for template_key in histograms.keys():
+        template_names[template_key] = _get_template_name_for_key(template_key, model_id)
 
     return {
         "binSize": HIST_BIN_SIZE,
         "labels": labels,
         "histograms": histograms,
         "top": top_cards,
-        "templateNames": template_name_map,
+        "templateNames": template_names,
     }
 
 
@@ -397,10 +405,9 @@ def difficult_cards(
         A dictionary containing difficult cards grouped by template.
     """
     cards = _filtered_cards(model_id, template_ords, deck_id)
-    template_name_map = _get_template_name_map(model_id)
     empty_result = {
         "byTemplate": {},
-        "templateNames": template_name_map,
+        "templateNames": {},
         "maxFailures": 0,
     }
 
@@ -427,18 +434,24 @@ def difficult_cards(
         if len(display) > 60:
             display = display[:57] + "…"
 
-        by_template.setdefault(card.ord, []).append(
+        template_key = _get_template_key(card, model_id)
+        by_template.setdefault(template_key, []).append(
             {"cid": card.id, "front": display, "failures": failures}
         )
 
-    for ordinal in by_template:
-        by_template[ordinal] = sorted(
-            by_template[ordinal], key=lambda x: x["failures"], reverse=True
+    for template_key in by_template:
+        by_template[template_key] = sorted(
+            by_template[template_key], key=lambda x: x["failures"], reverse=True
         )
+
+    # Create template names map using the new helper function
+    template_names = {}
+    for template_key in by_template.keys():
+        template_names[template_key] = _get_template_name_for_key(template_key, model_id)
 
     return {
         "byTemplate": by_template,
-        "templateNames": template_name_map,
+        "templateNames": template_names,
         "maxFailures": max_failures,
     }
 
@@ -456,35 +469,88 @@ def streak_days(deck_id: Optional[int]) -> int:
     if not mw.col or not mw.col.db:
         return 0
 
-    search_parts: List[str] = []
-    if deck_id is not None:
-        deck = mw.col.decks.get(DeckId(deck_id))
-        if deck:
-            deck_name = deck["name"].replace('"', '\\"')
-            search_parts.append(f'deck:"{deck_name}"')
+    try:
+        # Build search query for cards
+        search_query = ""
+        if deck_id is not None:
+            # Use deck name lookup that's more compatible across Anki versions
+            try:
+                # Try newer API first
+                if hasattr(mw.col.decks, 'name'):
+                    deck_name = mw.col.decks.name(DeckId(deck_id))
+                else:
+                    # Fallback to older API
+                    deck = mw.col.decks.get(DeckId(deck_id))
+                    deck_name = deck["name"] if deck else ""
+                
+                if deck_name:
+                    # Escape quotes in deck name
+                    deck_name = deck_name.replace('"', '\\"')
+                    search_query = f'deck:"{deck_name}"'
+            except:
+                # If deck lookup fails, use all cards
+                search_query = ""
 
-    query = " ".join(search_parts)
-    card_ids = mw.col.find_cards(query)
-    if not card_ids:
+        # Get cards using search
+        try:
+            if search_query:
+                card_ids = mw.col.find_cards(search_query)
+            else:
+                # Get all cards if no deck filter
+                card_ids = mw.col.find_cards("")
+        except:
+            return 0
+
+        if not card_ids:
+            return 0
+
+        # Get review log entries - use more robust SQL approach
+        try:
+            # For large card lists, use string concatenation but ensure card_ids are integers
+            safe_card_ids = [str(int(cid)) for cid in card_ids]
+            query = f"SELECT id FROM revlog WHERE cid IN ({','.join(safe_card_ids)}) ORDER BY id DESC"
+            revlog_ids = mw.col.db.all(query)
+        except:
+            return 0
+
+        if not revlog_ids:
+            return 0
+
+        # Convert timestamps to dates more safely
+        review_dates = set()
+        for (rid,) in revlog_ids:
+            try:
+                # Anki revlog IDs are millisecond timestamps
+                timestamp = rid / 1000.0
+                date = _dt.datetime.fromtimestamp(timestamp).date()
+                review_dates.add(date)
+            except (ValueError, OverflowError, OSError):
+                # Skip invalid timestamps
+                continue
+
+        if not review_dates:
+            return 0
+
+        # Calculate streak from today backwards
+        today = _dt.date.today()
+        streak = 0
+        current_day = today
+        
+        # Check if user studied today, if not, start from yesterday
+        # This allows streaks to continue even if user hasn't studied yet today
+        if today not in review_dates:
+            current_day = today - _dt.timedelta(days=1)
+        
+        while current_day in review_dates:
+            streak += 1
+            current_day -= _dt.timedelta(days=1)
+
+        return streak
+
+    except Exception as e:
+        # Log error but don't crash the addon
+        print(f"Error calculating streak: {e}")
         return 0
-
-    revlog_ids = mw.col.db.all(
-        f"SELECT id FROM revlog WHERE cid IN ({','.join(str(i) for i in card_ids)}) ORDER BY id DESC"
-    )
-    if not revlog_ids:
-        return 0
-
-    review_dates = set(
-        _dt.datetime.fromtimestamp(rid / 1000).date() for (rid,) in revlog_ids
-    )
-    today = _dt.date.today()
-    streak = 0
-    current_day = today
-    while current_day in review_dates:
-        streak += 1
-        current_day -= _dt.timedelta(days=1)
-
-    return streak
 
 
 def time_studied_history(
@@ -519,15 +585,15 @@ def time_studied_history(
         return empty_result
 
     template_name_map = _get_template_name_map(model_id)
-    card_template_map = {c.id: c.ord for c in cards}
+    card_template_map = {c.id: _get_template_key(c, model_id) for c in cards}
 
     bucket_dates: set[_dt.date] = set()
     time_per_template_bucket: Dict[int, Dict[str, float]] = {}
     total_time_per_template: Dict[int, float] = {}
 
     for cid, rid, time_ms in rev_rows:
-        ordinal = card_template_map.get(cid)
-        if ordinal is None:
+        template_key = card_template_map.get(cid)
+        if template_key is None:
             continue
 
         dt = _dt.datetime.fromtimestamp(rid / 1000.0)
@@ -536,11 +602,9 @@ def time_studied_history(
         label = _label_from_date(bucket_date, granularity)
         seconds = max(0.0, (time_ms or 0) / 1000.0)
 
-        template_buckets = time_per_template_bucket.setdefault(ordinal, {})
+        template_buckets = time_per_template_bucket.setdefault(template_key, {})
         template_buckets[label] = template_buckets.get(label, 0.0) + seconds
-        total_time_per_template[ordinal] = (
-            total_time_per_template.get(ordinal, 0.0) + seconds
-        )
+        total_time_per_template[template_key] = total_time_per_template.get(template_key, 0.0) + seconds
 
     if not bucket_dates:
         return empty_result
@@ -557,14 +621,14 @@ def time_studied_history(
     series: List[Dict[str, Any]] = []
     totals_seconds: Dict[str, float] = {}
 
-    for ordinal in sorted(time_per_template_bucket.keys()):
+    for template_key in sorted(time_per_template_bucket.keys()):
         data = [
-            round(time_per_template_bucket.get(ordinal, {}).get(label, 0.0), 2)
+            round(time_per_template_bucket.get(template_key, {}).get(label, 0.0), 2)
             for label in labels
         ]
-        label_name = template_name_map.get(ordinal, f"Template {ordinal + 1}")
-        series.append({"label": label_name, "data": data})
-        totals_seconds[label_name] = total_time_per_template.get(ordinal, 0.0)
+        template_name = _get_template_name_for_key(template_key, model_id)
+        series.append({"label": template_name, "data": data})
+        totals_seconds[template_name] = round(total_time_per_template.get(template_key, 0.0), 2)
 
     total_all_seconds = sum(total_time_per_template.values())
 
