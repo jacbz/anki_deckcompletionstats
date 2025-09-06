@@ -4,8 +4,10 @@ from __future__ import annotations
 All direct interaction with Anki collection objects that provides data to the UI
 should reside here to keep the main __init__ lean.
 """
-from typing import Optional, List, Dict, Any
+from typing import Optional, Any, cast
 from aqt import mw
+from anki.decks import DeckId
+from anki.models import NotetypeId
 
 
 def deck_card_count(deck_id: Optional[int]) -> int:
@@ -13,7 +15,7 @@ def deck_card_count(deck_id: Optional[int]) -> int:
         return 0
     if deck_id is None:
         return mw.col.card_count()
-    deck = mw.col.decks.get(deck_id)
+    deck = mw.col.decks.get(cast(DeckId, deck_id))
     if not deck:
         return mw.col.card_count()
     deck_name = deck["name"].replace('"', '\"')
@@ -46,7 +48,7 @@ def list_models() -> list[dict[str, Any]]:
 def get_model(model_id: int) -> Optional[dict[str, Any]]:
     if not mw.col:
         return None
-    return mw.col.models.get(model_id)  # type: ignore[return-value]
+    return mw.col.models.get(cast(NotetypeId, model_id))  # type: ignore[return-value]
 
 
 def model_templates(model_id: int) -> list[dict[str, Any]]:

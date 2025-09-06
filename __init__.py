@@ -4,13 +4,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Tuple, Any
+from typing import Optional, Tuple, Any, cast
 import json
 
 from aqt import mw, gui_hooks
 from aqt.qt import *  # noqa: F401,F403
 from aqt.utils import qconnect, showInfo
 from aqt.webview import AnkiWebView
+from anki.decks import DeckId
+from anki.models import NotetypeId
 
 from .data_access import deck_card_count, list_decks, list_models, model_templates, model_name
 
@@ -68,7 +70,7 @@ def selected_deck_name() -> str:
     did = get_selected_deck_id()
     if did is None:
         return "All Decks"
-    deck = mw.col.decks.get(did)
+    deck = mw.col.decks.get(cast(DeckId, did)) if mw.col else None
     if not deck:
         set_selected_deck_id(None)
         return "All Decks"
@@ -197,7 +199,7 @@ def choose_deck() -> None:
 
     current_name = selected_deck_name()
     current_index = 0
-    if current_name != "All DeckS":  # intentionally different? fix logical bug
+    if current_name != "All Decks":
         for i, (_, name) in enumerate(decks_sorted, start=1):
             if name == current_name:
                 current_index = i
@@ -206,13 +208,39 @@ def choose_deck() -> None:
     name, ok = QInputDialog.getItem(mw, ADDON_NAME, "Select deck scope:", names, current_index, False)
     if not ok:
         return
+    chosen_deck_id: Optional[int] = None
     if name == "All Decks":
         set_selected_deck_id(None)
+        set_selected_model_id(None)
     else:
         for did, dname in decks_sorted:
             if dname == name:
                 set_selected_deck_id(did)
+                chosen_deck_id = did
                 break
+    # If a specific deck was picked, attempt to auto-set model from first card
+    if chosen_deck_id is not None and mw.col:
+        deck_obj = mw.col.decks.get(cast(DeckId, chosen_deck_id))
+        if deck_obj:
+            deck_name = deck_obj["name"].replace('"', '\"')
+            cids = mw.col.find_cards(f'deck:"{deck_name}"')
+            if cids:
+                card = mw.col.get_card(cids[0])
+                try:
+                    note = card.note()
+                    mid = getattr(note, 'mid', None)
+                    if mid is None:
+                        # fallback via notetype lookup
+                        nt = getattr(note, 'note_type', lambda: None)()
+                        if nt:
+                            mid = nt.get('id')
+                    if mid is not None:
+                        set_selected_model_id(mid)
+                except Exception:
+                    pass
+            else:
+                # No cards -> clear model selection
+                set_selected_model_id(None)
 
 
 def choose_model() -> None:
@@ -240,7 +268,8 @@ def choose_model() -> None:
     else:
         for mid, nm in model_pairs_sorted:
             if nm == sel:
-                set_selected_model_id(mid)
+                if mid is not None:
+                    set_selected_model_id(cast(int, mid))
                 break
 
 
