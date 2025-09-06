@@ -2,5 +2,6 @@
   "selected_deck_id": null,
   "selected_model_id": null,
   "selected_model_templates": null,
-  "granularity": "days"
+  "progress_granularity": "days",
+  "progress_forecast_enabled": false
 }

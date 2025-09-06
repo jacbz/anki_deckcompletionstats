@@ -28,6 +28,7 @@ def get_config() -> dict:
     cfg.setdefault("selected_model_id", None)
     cfg.setdefault("selected_model_templates", None)  # list of ords or None
     cfg.setdefault("granularity", "days")
+    cfg.setdefault("progress_forecast_enabled", False)
     return cfg
 
 
@@ -77,6 +78,16 @@ def set_granularity(g: str) -> None:
     set_config(cfg)
 
 
+def is_forecast_enabled() -> bool:
+    return bool(get_config().get("progress_forecast_enabled", False))
+
+
+def set_forecast_enabled(on: bool) -> None:
+    cfg = get_config()
+    cfg["progress_forecast_enabled"] = on
+    set_config(cfg)
+
+
 def selected_deck_name() -> str:
     did = get_selected_deck_id()
     if did is None:
@@ -110,7 +121,7 @@ def show_statistics_window() -> None:
     web = AnkiWebView(dialog)
     layout.addWidget(web)
 
-    dialog.resize(900, 640)
+    dialog.resize(800, 1000)
 
     dialog._web = web  # type: ignore[attr-defined]
     mw.statistics5000_dialog = dialog  # type: ignore[attr-defined]
@@ -140,8 +151,9 @@ def build_state_json() -> str:
         sel = get_selected_template_ords()
         if sel is not None:
             state["selectedTemplates"] = sel
-        progress = template_progress(mid, sel, get_selected_deck_id(), get_granularity())
+        progress = template_progress(mid, sel, get_selected_deck_id(), get_granularity(), forecast=is_forecast_enabled())
         state["progress"] = progress
+        state["forecastEnabled"] = is_forecast_enabled()
     else:
         # If no specific model, we could aggregate all models later; leave empty for now
         state["progress"] = {"labels": [], "series": []}
@@ -203,10 +215,20 @@ def on_js_message(handled: Tuple[bool, Optional[str]], message: str, context):  
                 set_selected_template_ords([int(o) for o in ords])
         except Exception:
             pass
+        dlg = getattr(mw, "statistics5000_dialog", None)
+        if dlg:
+            refresh_web(dlg)
         return (True, None)
     if message.startswith("statistics5000_set_granularity:"):
         g = message.split(":",1)[1]
         set_granularity(g)
+        dlg = getattr(mw, "statistics5000_dialog", None)
+        if dlg:
+            refresh_web(dlg)
+        return (True, None)
+    if message.startswith("statistics5000_set_forecast:"):
+        flag = message.split(":",1)[1]
+        set_forecast_enabled(flag == '1')
         dlg = getattr(mw, "statistics5000_dialog", None)
         if dlg:
             refresh_web(dlg)

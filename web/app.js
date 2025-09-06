@@ -69,50 +69,64 @@ function saveTemplateSelection() {
   }
 }
 
-function selectModel() {
-  if (typeof pycmd !== 'undefined') {
-    pycmd('statistics5000_select_model');
-  }
-}
+function changeGranularity(g) { if (typeof pycmd !== 'undefined') pycmd('statistics5000_set_granularity:' + g); }
+function toggleForecast(on) { if (typeof pycmd !== 'undefined') pycmd('statistics5000_set_forecast:' + (on ? '1':'0')); }
 
-// Chart.js progress chart
 let statistics5000Chart;
 function renderProgressChart(progress) {
   const ctx = document.getElementById('statsChart');
   if (!ctx || typeof Chart === 'undefined') return;
   const palette = ['#4facfe','#38f9d7','#ffb347','#ff6b6b','#a78bfa','#f472b6','#34d399'];
-  const datasets = (progress.series || []).map((s,i) => ({
-    label: s.label,
-    data: s.data,
-    borderColor: palette[i % palette.length],
-    backgroundColor: palette[i % palette.length] + '33',
-    tension: 0.25,
-    pointRadius: 2,
-    fill: false
-  }));
+  const baseLabels = progress.labels || [];
+  const datasets = [];
+  let maxY = 0;
+  (progress.series || []).forEach((s,i) => {
+    maxY = Math.max(maxY, ...(s.data||[]), ...((s.forecast||[]).filter(v=>typeof v==='number')));
+    datasets.push({
+      label: s.label,
+      data: s.data.concat(Array(Math.max(0, baseLabels.length - s.data.length)).fill(null)),
+      borderColor: palette[i % palette.length],
+      backgroundColor: palette[i % palette.length] + '33',
+      tension: 0.25,
+      pointRadius: 2,
+      spanGaps: true,
+      fill: false,
+      borderWidth: 2,
+    });
+    if (s.forecast) {
+      const fcData = s.forecast.map(v => v === null ? null : v);
+      datasets.push({
+        label: s.label + ' (forecast)',
+        data: fcData,
+        borderColor: palette[i % palette.length],
+        borderDash: [4,3],
+        pointRadius: 0,
+        spanGaps: true,
+        fill: false,
+        tension: 0.15,
+        borderWidth: 1.5,
+      });
+    }
+  });
+  const ySuggestedMax = maxY + Math.ceil(maxY*0.05);
   if (statistics5000Chart) {
-    statistics5000Chart.data.labels = progress.labels;
+    statistics5000Chart.data.labels = baseLabels;
     statistics5000Chart.data.datasets = datasets;
+    statistics5000Chart.options.scales.y.suggestedMax = ySuggestedMax;
     statistics5000Chart.update();
   } else {
     statistics5000Chart = new Chart(ctx, {
       type: 'line',
-      data: { labels: progress.labels, datasets },
+      data: { labels: baseLabels, datasets },
       options: {
         animation: false,
         plugins: { legend: { labels: { color: '#e6edf3', font: { size: 10 } } } },
         scales: {
           x: { ticks: { color: '#9aa2ab', maxRotation: 60, autoSkip: true }, grid: { color: '#30363d' } },
-          y: { ticks: { color: '#9aa2ab' }, grid: { color: '#30363d' } }
+          y: { ticks: { color: '#9aa2ab' }, grid: { color: '#30363d' }, suggestedMax: ySuggestedMax }
         }
       }
     });
-  }
-}
-
-function changeGranularity(g) {
-  if (typeof pycmd !== 'undefined') {
-    pycmd('statistics5000_set_granularity:' + g);
   }
 }
 
@@ -125,12 +139,12 @@ function statistics5000UpdateState(data) {
     if (s.modelName) updateModelName(s.modelName);
     if (Array.isArray(s.templates)) setModelTemplates(s.templates, s.selectedTemplates);
     if (s.granularity) {
-      const sel = document.getElementById('granularitySelect');
-      if (sel && sel.value !== s.granularity) sel.value = s.granularity;
+      const radios = document.querySelectorAll('#granularityRadios input[type="radio"]');
+      radios.forEach(r => { if (r.value === s.granularity) r.checked = true; });
     }
-    if (s.progress) {
-      renderProgressChart(s.progress);
-    }
+    const fcToggle = document.getElementById('forecastToggle');
+    if (fcToggle && typeof s.forecastEnabled === 'boolean') fcToggle.checked = s.forecastEnabled;
+    if (s.progress) renderProgressChart(s.progress);
   } catch (e) { console.error(e); }
 }
 

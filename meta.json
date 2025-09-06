@@ -1,1 +1,1 @@
-{"config": {"selected_deck_id": 1724795816790, "selected_model_id": 1683059128297, "selected_model_templates": [0, 1], "granularity": "days"}}
+{"config": {"selected_deck_id": 1724795816790, "selected_model_id": 1683059128297, "selected_model_templates": [0], "progress_granularity": "days", "progress_forecast_enabled": true, "granularity": "days"}}
