@@ -1,0 +1,27 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "createZip",
+            "type": "shell",
+            "command": "sh",
+            "args": [
+                "-c",
+                "rm -f deckcompletionstats.zip && git ls-files -z | xargs -0 zip deckcompletionstats.zip && echo 'Created deckcompletionstats.zip with '$(git ls-files | wc -l | tr -d ' ')' files'"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}
