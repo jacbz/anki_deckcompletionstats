@@ -336,7 +336,7 @@ def choose_model() -> None:
         [(m.get("id"), m.get("name", "(Unnamed)")) for m in list_models()],
         key=lambda x: x[1].lower(),
     )
-    names = ["(Any Model)"] + [name for _, name in models]
+    names = [name for _, name in models]
     current_mid = config.get_selected_model_id()
     current_name = next(
         (name for mid, name in models if mid == current_mid), "(Any Model)"
@@ -349,12 +349,9 @@ def choose_model() -> None:
     if not ok:
         return
 
-    if sel == "(Any Model)":
-        config.set_selected_model_id(None)
-    else:
-        chosen_model_id = next((mid for mid, name in models if name == sel), None)
-        if chosen_model_id:
-            config.set_selected_model_id(chosen_model_id)
+    chosen_model_id = next((mid for mid, name in models if name == sel), None)
+    if chosen_model_id:
+        config.set_selected_model_id(chosen_model_id)
 
     # No need to manually refresh here, on_js_message handles it
 

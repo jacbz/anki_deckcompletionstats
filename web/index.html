@@ -33,8 +33,8 @@
   <div class="settings-wrapper">
     <div class="card settings-card fancy">
       <div class="settings-lines">
-        <div class="setting-line" id="deckLine">Current deck: <span id="currentDeck" class="interactive" onclick="selectDeck()">(All Decks)</span> <span id="deckCount" class="muted"></span></div>
-        <div class="setting-line" id="modelLine">Current model: <span id="currentModel" class="interactive" onclick="selectModel()">(Any Model)</span></div>
+        <div class="setting-line" id="deckLine">Current deck: <span id="currentDeck" class="interactive">(All Decks)</span> <span id="deckCount" class="muted"></span></div>
+        <div class="setting-line" id="modelLine">Current model: <span id="currentModel" class="interactive">(Any Model)</span></div>
       </div>
     </div>
   </div>
@@ -44,7 +44,7 @@
       <h2 class="card-title">Progress</h2>
       <div class="card-desc">Overall studied cards over time. Shows how your total grows each period and projected finish.</div>
       <canvas id="statsChart" class="chart-canvas"></canvas>
-      <label class="forecast-toggle below"><input type="checkbox" id="forecastToggle" onchange="toggleForecast(this.checked)"> Show forecast</label>
+      <label class="forecast-toggle below"><input type="checkbox" id="forecastToggle"> Show forecast</label>
       <div id="forecastSummaries" class="summaries" style="display:none;"></div>
     </div>
 
@@ -71,7 +71,7 @@
       <h2 class="card-title">Time Studied</h2>
       <div class="card-desc">Total study time spent each period.</div>
       <canvas id="timeStudiedChart" class="chart-canvas"></canvas>
-      <div id="timeStudiedSummary" class="inline-note"></div>
+      <div id="timeStudiedSummary" class="summaries"></div>
     </div>
 
     <div class="card" id="timeSpentSection">
@@ -93,16 +93,18 @@
 
   <!-- Floating pill with granularity + template selection (stacked rows) -->
   <div id="floatingControls" class="floating-pill vertical">
-    <div class="pill-toggle" onclick="togglePill()" title="Collapse / Expand"></div>
+    <div class="pill-header">
+      <div class="pill-toggle" title="Collapse / Expand"></div>
+    </div>
     <div class="pill-content">
       <div class="pill-group">
         <div class="pill-label">Granularity</div>
         <div id="granularityRadios" class="pill-granularity">
-          <label class="granularity-radio"><input type="radio" name="granularity" value="days" onchange="changeGranularity(this.value)">Days</label>
-          <label class="granularity-radio"><input type="radio" name="granularity" value="weeks" onchange="changeGranularity(this.value)">Weeks</label>
-          <label class="granularity-radio"><input type="radio" name="granularity" value="months" onchange="changeGranularity(this.value)">Months</label>
-          <label class="granularity-radio"><input type="radio" name="granularity" value="quarters" onchange="changeGranularity(this.value)">Quarters</label>
-          <label class="granularity-radio"><input type="radio" name="granularity" value="years" onchange="changeGranularity(this.value)">Years</label>
+          <label class="granularity-radio"><input type="radio" name="granularity" value="days">Days</label>
+          <label class="granularity-radio"><input type="radio" name="granularity" value="weeks">Weeks</label>
+          <label class="granularity-radio"><input type="radio" name="granularity" value="months">Months</label>
+          <label class="granularity-radio"><input type="radio" name="granularity" value="quarters">Quarters</label>
+          <label class="granularity-radio"><input type="radio" name="granularity" value="years">Years</label>
         </div>
       </div>
       <div class="pill-group templates-group">
