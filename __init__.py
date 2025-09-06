@@ -1,123 +1,79 @@
 # Deck Completion Stats Add-on
-# Adds a Tools menu item that opens a window displaying statistics.
+
+"""
+Adds a Tools menu item to open a window with deck completion statistics.
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional, Tuple, Any, cast
 import json
+from pathlib import Path
+from typing import Any, Optional, Tuple, cast
 
-from aqt import mw, gui_hooks
-from aqt.qt import *  # noqa: F401,F403
+from anki.decks import DeckId
+from aqt import gui_hooks, mw
+from aqt.qt import QAction, QDialog, QInputDialog, QVBoxLayout
 from aqt.utils import qconnect, showInfo
 from aqt.webview import AnkiWebView
-from anki.decks import DeckId
-from anki.models import NotetypeId
 
-from .analytics import learning_history, time_spent_stats, difficult_cards, streak_days, time_studied_history
+from . import config
+from .analytics import (
+    difficult_cards,
+    learning_history,
+    streak_days,
+    time_spent_stats,
+    time_studied_history,
+)
 from .data_access import (
     deck_card_count,
     list_decks,
     list_models,
-    model_templates,
     model_name,
+    model_templates,
     template_progress,
+    template_status_counts,
 )
 
 ADDON_NAME = "Deck Completion Stats"
-ADDON_MODULE = __name__
-
-# Config helpers -------------------------------------------------------------
-
-
-def get_config() -> dict:
-    cfg = mw.addonManager.getConfig(ADDON_MODULE) or {}
-    cfg.setdefault("selected_deck_id", None)
-    cfg.setdefault("selected_model_id", None)
-    cfg.setdefault("selected_model_templates", None)
-    cfg.setdefault("granularity", "days")
-    cfg.setdefault("progress_forecast_enabled", False)
-    return cfg
-
-
-def set_config(cfg: dict) -> None:
-    mw.addonManager.writeConfig(ADDON_MODULE, cfg)
-
-
-def get_selected_deck_id() -> Optional[int]:
-    return get_config().get("selected_deck_id")  # type: ignore[return-value]
-
-
-def set_selected_deck_id(did: Optional[int]) -> None:
-    cfg = get_config()
-    cfg["selected_deck_id"] = did
-    set_config(cfg)
-
-
-def get_selected_model_id() -> Optional[int]:
-    return get_config().get("selected_model_id")  # type: ignore[return-value]
-
-
-def set_selected_model_id(mid: Optional[int]) -> None:
-    cfg = get_config()
-    cfg["selected_model_id"] = mid
-    cfg["selected_model_templates"] = None
-    set_config(cfg)
-
-
-def get_selected_template_ords() -> Optional[list[int]]:
-    return get_config().get("selected_model_templates")  # type: ignore[return-value]
-
-
-def set_selected_template_ords(ords: Optional[list[int]]) -> None:
-    cfg = get_config()
-    cfg["selected_model_templates"] = ords
-    set_config(cfg)
-
-
-def get_granularity() -> str:
-    return get_config().get("granularity", "days")
-
-
-def set_granularity(g: str) -> None:
-    cfg = get_config()
-    cfg["granularity"] = g
-    set_config(cfg)
-
-
-def is_forecast_enabled() -> bool:
-    return bool(get_config().get("progress_forecast_enabled", False))
-
-
-def set_forecast_enabled(on: bool) -> None:
-    cfg = get_config()
-    cfg["progress_forecast_enabled"] = on
-    set_config(cfg)
+ADDON_MODULE = __name__.split(".")[0]
 
 
 def selected_deck_name() -> str:
-    did = get_selected_deck_id()
+    """Gets the name of the currently selected deck from config."""
+    did = config.get_selected_deck_id()
     if did is None:
         return "All Decks"
-    deck = mw.col.decks.get(cast(DeckId, did)) if mw.col else None
-    if not deck:
-        set_selected_deck_id(None)
+    try:
+        deck = mw.col.decks.get(cast(DeckId, did))
+        if not deck:
+            config.set_selected_deck_id(None)
+            return "All Decks"
+        return deck["name"]
+    except Exception:
+        config.set_selected_deck_id(None)
         return "All Decks"
-    return deck["name"]
 
 
-# UI creation ----------------------------------------------------------------
+#
+# UI-related functions
+#
 
 
 def show_statistics_window() -> None:
+    """Create and show the main statistics window."""
     if not mw.col:
+        showInfo("Please open a collection first.")
         return
+
+    # Reuse existing window if available
     existing = getattr(mw, "deckcompletionstats_dialog", None)
     if existing and existing.isVisible():
         refresh_web(existing)
         existing.raise_()
         existing.activateWindow()
         return
+
+    # Create a new window
     dialog = QDialog(mw)
     dialog.setWindowTitle(ADDON_NAME)
     dialog.setModal(False)
@@ -125,88 +81,96 @@ def show_statistics_window() -> None:
     web = AnkiWebView(dialog)
     layout.addWidget(web)
     dialog.resize(1000, 800)
+
+    # Keep references to avoid garbage collection
     dialog._web = web  # type: ignore[attr-defined]
     mw.deckcompletionstats_dialog = dialog  # type: ignore[attr-defined]
+
     load_web_content(dialog)
     dialog.show()
 
 
-def current_count() -> int:
-    return deck_card_count(get_selected_deck_id())
-
-
 def build_state_json() -> str:
+    """
+    Gathers all necessary data from backend modules and serializes it into a
+    JSON string for the webview.
+    """
     state: dict[str, Any] = {
-        "count": current_count(),
+        "count": deck_card_count(config.get_selected_deck_id()),
         "deckName": selected_deck_name(),
-        "modelName": model_name(get_selected_model_id()),
-        "granularity": get_granularity(),
-        "streak": streak_days(get_selected_deck_id()),
+        "modelName": model_name(config.get_selected_model_id()),
+        "granularity": config.get_granularity(),
+        "streak": streak_days(config.get_selected_deck_id()),
     }
-    mid = get_selected_model_id()
+
+    mid = config.get_selected_model_id()
     if mid is not None:
-        tmpls = model_templates(mid)
-        state["templates"] = [
-            {"ord": t.get("ord"), "name": t.get("name") or f"Card {t.get('ord',0)+1}"}
-            for t in tmpls
-        ]
+        sel_ords = config.get_selected_template_ords()
+        deck_id = config.get_selected_deck_id()
+        granularity = config.get_granularity()
+
+        # Core data from analytics and data_access modules
+        state.update(
+            {
+                "templates": [
+                    {
+                        "ord": t.get("ord"),
+                        "name": t.get("name") or f"Card {t.get('ord', 0) + 1}",
+                    }
+                    for t in model_templates(mid)
+                ],
+                "selectedTemplates": sel_ords,
+                "progress": template_progress(
+                    mid,
+                    sel_ords,
+                    deck_id,
+                    granularity,
+                    forecast=config.is_forecast_enabled(),
+                ),
+                "forecastEnabled": config.is_forecast_enabled(),
+                "learningHistory": learning_history(mid, sel_ords, deck_id, granularity),
+                "timeSpent": time_spent_stats(mid, sel_ords, deck_id),
+                "timeStudied": time_studied_history(mid, sel_ords, deck_id, granularity),
+                "difficult": difficult_cards(mid, sel_ords, deck_id),
+                "status": template_status_counts(mid, sel_ords, deck_id),
+            }
+        )
+
+        # Add field names for difficult card display
         try:
             mdl = next((m for m in list_models() if m.get("id") == mid), None)
             if mdl:
                 state["fieldNames"] = [f.get("name", "") for f in mdl.get("flds", [])]
         except Exception:
             state["fieldNames"] = []
-        sel = get_selected_template_ords()
-        if sel is not None:
-            state["selectedTemplates"] = sel
-        progress = template_progress(
-            mid,
-            sel,
-            get_selected_deck_id(),
-            get_granularity(),
-            forecast=is_forecast_enabled(),
-        )
-        state["progress"] = progress
-        state["forecastEnabled"] = is_forecast_enabled()
-        state["learningHistory"] = learning_history(
-            mid, sel, get_selected_deck_id(), get_granularity()
-        )
-        state["timeSpent"] = time_spent_stats(
-            mid, sel, get_selected_deck_id()
-        )
-        state["timeStudied"] = time_studied_history(
-            mid, sel, get_selected_deck_id(), get_granularity()
-        )
-        # Derived high-level metrics
+
+        # Derived high-level metrics for dashboard KPIs
         try:
             progress_series = state.get("progress", {}).get("series", []) or []
-            studied_sum = 0
-            total_sum = 0
-            for s in progress_series:
-                data = s.get("data") or []
-                if data:
-                    studied_sum += (data[-1] or 0)
-                total_sum += s.get("totalCards", 0) or 0
-            completion_pct = (studied_sum / total_sum * 100) if total_sum > 0 else 0.0
-            state["completionPercent"] = round(completion_pct, 1)
+            studied_sum = sum(
+                s.get("data", [])[-1] for s in progress_series if s.get("data")
+            )
+            total_sum = sum(s.get("totalCards", 0) for s in progress_series)
+
+            state["completionPercent"] = (
+                round(studied_sum / total_sum * 100, 1) if total_sum > 0 else 0.0
+            )
             state["studiedCardsCount"] = studied_sum
-            ts = state.get("timeStudied", {}).get("totalSecondsAll", 0) or 0
-            state["totalStudiedSeconds"] = int(ts)
-        except Exception:
+            state["totalStudiedSeconds"] = int(
+                state.get("timeStudied", {}).get("totalSecondsAll", 0)
+            )
+        except (IndexError, TypeError, ZeroDivisionError):
             state["completionPercent"] = 0.0
             state["studiedCardsCount"] = 0
             state["totalStudiedSeconds"] = 0
-        state["difficult"] = difficult_cards(
-            mid, sel, get_selected_deck_id()
-        )
-        from .data_access import template_status_counts
-        state["status"] = template_status_counts(mid, sel, get_selected_deck_id())
+
     else:
+        # Default empty state when no model is selected
         state.update(
             {
                 "progress": {"labels": [], "series": []},
                 "learningHistory": {"labels": [], "series": []},
-                "timeSpent": {"binSize":15, "labels": [], "histograms": {}, "top": {}},
+                "timeSpent": {"binSize": 15, "labels": [], "histograms": {}, "top": {}},
                 "timeStudied": {"labels": [], "series": []},
                 "difficult": {"byTemplate": {}},
                 "status": {"byTemplate": {}},
@@ -219,163 +183,195 @@ def build_state_json() -> str:
 
 
 def load_web_content(dialog: QDialog) -> None:
+    """Loads the initial HTML and injects the dynamic state."""
     web: AnkiWebView = dialog._web  # type: ignore[attr-defined]
     addon_dir = Path(__file__).resolve().parent
     index_path = addon_dir / "web" / "index.html"
+
     if not index_path.exists():
-        showInfo(f"Missing index.html for {ADDON_NAME}")
+        showInfo(f"Missing required file: {index_path}")
         return
+
+    # Set up web exports for CSS/JS
     mw.addonManager.setWebExports(ADDON_MODULE, r"web/.*")
-    html = index_path.read_text(encoding="utf-8")
     pkg = mw.addonManager.addonFromModule(ADDON_MODULE)
+
+    html = index_path.read_text(encoding="utf-8")
+    # Replace relative paths with absolute paths to addon resources
     html = html.replace('href="app.css"', f'href="/_addons/{pkg}/web/app.css"')
     html = html.replace('src="app.js"', f'src="/_addons/{pkg}/web/app.js"')
+
     web.stdHtml(html, context=None)
     inject_dynamic_state(web)
 
 
 def inject_dynamic_state(web: AnkiWebView) -> None:
+    """Serializes the current state and sends it to the webview."""
     js = f"deckcompletionstatsUpdateState({json.dumps(build_state_json())});"
     web.eval(js)
 
 
 def refresh_web(dialog: QDialog) -> None:
+    """Just injects the latest state into the existing webview."""
     web: AnkiWebView = dialog._web  # type: ignore[attr-defined]
     inject_dynamic_state(web)
 
 
-# Bridge handling -----------------------------------------------------------
+#
+# Bridge handling for messages from Javascript
+#
 
 
-def on_js_message(handled: Tuple[bool, Optional[str]], message: str, context):  # type: ignore[override]
-    if message == "deckcompletionstats_refresh":
-        dlg = getattr(mw, "deckcompletionstats_dialog", None)
-        refresh_web(dlg) if dlg else None
-        return (True, None)
-    if message == "deckcompletionstats_select_deck":
+def on_js_message(
+    handled: Tuple[bool, Any], message: str, context: Any
+) -> Tuple[bool, Any]:
+    """
+    Handles messages sent from the webview's Javascript.
+    The message format is "deckcompletionstats_COMMAND:PAYLOAD".
+    """
+    if not message.startswith("deckcompletionstats_"):
+        return handled
+
+    dlg = getattr(mw, "deckcompletionstats_dialog", None)
+    command, *payload = message.split(":", 1)
+    payload_str = payload[0] if payload else ""
+
+    if command == "deckcompletionstats_select_deck":
         choose_deck()
-        dlg = getattr(mw, "deckcompletionstats_dialog", None)
-        refresh_web(dlg) if dlg else None
-        return (True, None)
-    if message == "deckcompletionstats_select_model":
+    elif command == "deckcompletionstats_select_model":
         choose_model()
-        dlg = getattr(mw, "deckcompletionstats_dialog", None)
-        refresh_web(dlg) if dlg else None
-        return (True, None)
-    if message.startswith("deckcompletionstats_update_templates:"):
-        payload = message.split(":", 1)[1]
+    elif command == "deckcompletionstats_update_templates":
         try:
-            ords = json.loads(payload)
+            ords = json.loads(payload_str)
             if isinstance(ords, list):
-                set_selected_template_ords([int(o) for o in ords])
-        except Exception:
-            pass
-        dlg = getattr(mw, "deckcompletionstats_dialog", None)
-        refresh_web(dlg) if dlg else None
-        return (True, None)
-    if message.startswith("deckcompletionstats_set_granularity:"):
-        g = message.split(":", 1)[1]
-        set_granularity(g)
-        dlg = getattr(mw, "deckcompletionstats_dialog", None)
-        refresh_web(dlg) if dlg else None
-        return (True, None)
-    if message.startswith("deckcompletionstats_set_forecast:"):
-        flag = message.split(":", 1)[1]
-        set_forecast_enabled(flag == "1")
-        dlg = getattr(mw, "deckcompletionstats_dialog", None)
-        refresh_web(dlg) if dlg else None
-        return (True, None)
-    return handled
+                config.set_selected_template_ords([int(o) for o in ords])
+        except (IndexError, json.JSONDecodeError):
+            pass  # Ignore malformed messages
+    elif command == "deckcompletionstats_set_granularity":
+        if payload_str:
+            config.set_granularity(payload_str)
+    elif command == "deckcompletionstats_set_forecast":
+        if payload_str:
+            config.set_forecast_enabled(payload_str == "1")
+
+    # Refresh the webview after any action
+    if dlg:
+        refresh_web(dlg)
+
+    return (True, None)
 
 
-# Selection dialogs ---------------------------------------------------------
+#
+# User selection dialogs
+#
 
 
 def choose_deck() -> None:
+    """Shows a dialog to let the user select a deck."""
     if not mw.col:
         return
-    decks = list_decks()
-    decks_sorted = sorted(decks, key=lambda x: x[1].lower())
-    names = ["All Decks"] + [name for _, name in decks_sorted]
+
+    decks = sorted(list_decks(), key=lambda x: x[1].lower())
+    names = ["All Decks"] + [name for _, name in decks]
     current_name = selected_deck_name()
-    current_index = 0
-    if current_name != "All Decks":
-        for i, (_, name) in enumerate(decks_sorted, start=1):
-            if name == current_name:
-                current_index = i
-                break
+    current_index = names.index(current_name) if current_name in names else 0
+
     name, ok = QInputDialog.getItem(
         mw, ADDON_NAME, "Select deck scope:", names, current_index, False
     )
     if not ok:
         return
-    chosen_deck_id: Optional[int] = None
+
     if name == "All Decks":
-        set_selected_deck_id(None)
-        set_selected_model_id(None)
+        config.set_selected_deck_id(None)
+        config.set_selected_model_id(None)
     else:
-        for did, dname in decks_sorted:
-            if dname == name:
-                set_selected_deck_id(did)
-                chosen_deck_id = did
-                break
-    if chosen_deck_id is not None and mw.col:
-        deck_obj = mw.col.decks.get(cast(DeckId, chosen_deck_id))
-        if deck_obj:
-            deck_name = deck_obj["name"].replace('"', '"')
-            cids = mw.col.find_cards(f'deck:"{deck_name}"')
-            if cids:
-                card = mw.col.get_card(cids[0])
-                try:
-                    note = card.note()
-                    mid = getattr(note, "mid", None)
-                    if mid is None:
-                        nt = getattr(note, "note_type", lambda: None)()
-                        mid = nt.get("id") if nt else None
-                    if mid is not None:
-                        set_selected_model_id(mid)
-                except Exception:
-                    pass
-            else:
-                set_selected_model_id(None)
+        # Find the deck ID from the selected name
+        chosen_deck_id = next((did for did, dname in decks if dname == name), None)
+        if chosen_deck_id:
+            config.set_selected_deck_id(chosen_deck_id)
+            # Auto-select the most common model in the deck
+            auto_select_model_for_deck(chosen_deck_id)
+
+
+def auto_select_model_for_deck(deck_id: int) -> None:
+    """
+    Finds the most common notetype in a given deck and sets it in config.
+    If no cards are in the deck, it clears the model selection.
+    """
+    if not mw.col:
+        return
+    try:
+        deck_obj = mw.col.decks.get(cast(DeckId, deck_id))
+        if not deck_obj:
+            return
+        # Anki queries need deck names, with quotes escaped
+        deck_name = deck_obj["name"].replace('"', '\\"')
+        cids = mw.col.find_cards(f'deck:"{deck_name}"')
+        if cids:
+            # A simple heuristic: just use the model of the first card.
+            # A more robust approach might count model occurrences.
+            card = mw.col.get_card(cids[0])
+            note = card.note()
+            mid = getattr(note, "mid", None)
+            if mid is None:  # Fallback for older Anki versions
+                nt = getattr(note, "note_type", lambda: None)()
+                mid = nt.get("id") if nt else None
+            if mid is not None:
+                config.set_selected_model_id(mid)
+        else:
+            # No cards in deck, so no model to select
+            config.set_selected_model_id(None)
+    except Exception:
+        # On any error, revert to a safe default
+        config.set_selected_model_id(None)
 
 
 def choose_model() -> None:
+    """Shows a dialog to let the user select a notetype (model)."""
     if not mw.col:
         return
-    models = list_models()
-    model_pairs = [(m.get("id"), m.get("name", "(Unnamed)"), m) for m in models]
-    model_pairs_sorted = sorted(model_pairs, key=lambda x: x[1].lower())
-    names = ["(Any Model)"] + [name for _, name, _ in model_pairs_sorted]
-    current_mid = get_selected_model_id()
-    current_index = 0
-    if current_mid is not None:
-        for i, (mid, nm, _) in enumerate(model_pairs_sorted, start=1):
-            if mid == current_mid:
-                current_index = i
-                break
+
+    models = sorted(
+        [(m.get("id"), m.get("name", "(Unnamed)")) for m in list_models()],
+        key=lambda x: x[1].lower(),
+    )
+    names = ["(Any Model)"] + [name for _, name in models]
+    current_mid = config.get_selected_model_id()
+    current_name = next(
+        (name for mid, name in models if mid == current_mid), "(Any Model)"
+    )
+    current_index = names.index(current_name) if current_name in names else 0
+
     sel, ok = QInputDialog.getItem(
         mw, ADDON_NAME, "Select model:", names, current_index, False
     )
     if not ok:
         return
+
     if sel == "(Any Model)":
-        set_selected_model_id(None)
-        return
-    for mid, nm, m in model_pairs_sorted:
-        if nm == sel:
-            set_selected_model_id(mid)
-            break
-    dlg = getattr(mw, "deckcompletionstats_dialog", None)
-    refresh_web(dlg) if dlg else None
+        config.set_selected_model_id(None)
+    else:
+        chosen_model_id = next((mid for mid, name in models if name == sel), None)
+        if chosen_model_id:
+            config.set_selected_model_id(chosen_model_id)
+
+    # No need to manually refresh here, on_js_message handles it
 
 
-# Register hook -------------------------------------------------------------
-if not getattr(gui_hooks, "_deckcompletionstats_registered", False):  # type: ignore[attr-defined]
+#
+# Add-on setup
+#
+
+def setup() -> None:
+    """Registers hooks and adds the menu item."""
+    # Register the JS message handler
     gui_hooks.webview_did_receive_js_message.append(on_js_message)
-    gui_hooks._deckcompletionstats_registered = True  # type: ignore[attr-defined]
 
-# Menu action ---------------------------------------------------------------
-action = QAction(ADDON_NAME, mw)
-qconnect(action.triggered, show_statistics_window)
-mw.form.menuTools.addAction(action)
+    # Add menu item
+    action = QAction(ADDON_NAME, mw)
+    qconnect(action.triggered, show_statistics_window)
+    mw.form.menuTools.addAction(action)
+
+# Run setup
+setup()
