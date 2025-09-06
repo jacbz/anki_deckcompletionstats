@@ -1,0 +1,88 @@
+:root {
+  color-scheme: dark;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, 'Helvetica Neue', Arial, sans-serif;
+  background: #0d1117;
+  color: #e6edf3;
+  margin: 1.5rem 2rem 3rem;
+}
+h1 {
+  font-size: 1.9rem;
+  margin: 0 0 0.75rem;
+  font-weight: 600;
+  letter-spacing: .5px;
+  background: linear-gradient(90deg,#4facfe,#38f9d7);
+  -webkit-background-clip: text;
+  color: transparent;
+}
+.stat-box {
+  margin-top: 1.25rem;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 14px;
+  padding: 1.75rem 1.5rem 2rem;
+  box-shadow: 0 4px 18px -6px rgba(0,0,0,0.55);
+  position: relative;
+  overflow: hidden;
+}
+.stat-box:before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 20% 15%, rgba(56,249,215,0.15), transparent 60%),
+              radial-gradient(circle at 90% 80%, rgba(79,172,254,0.12), transparent 55%);
+  pointer-events: none;
+}
+.label {
+  font-size: .9rem;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  opacity: .7;
+}
+.value {
+  margin-top: .4rem;
+  font-size: 3.2rem;
+  font-weight: 700;
+  line-height: 1.05;
+  background: linear-gradient(90deg,#38f9d7,#4facfe);
+  -webkit-background-clip: text;
+  color: transparent;
+}
+.foot {
+  margin-top: 2.2rem;
+  font-size: .7rem;
+  opacity: .55;
+  letter-spacing: .8px;
+}
+button.refresh, button.select-deck {
+  margin-top: 1.6rem;
+  background: linear-gradient(90deg,#4facfe,#38f9d7);
+  color: #0d1117;
+  border: none;
+  border-radius: 8px;
+  padding: .6rem 1.1rem;
+  font-size: .85rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.35);
+  transition: transform .15s ease, box-shadow .15s ease;
+  margin-right: .6rem;
+}
+button.refresh:hover, button.select-deck:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px -4px rgba(0,0,0,0.55);
+}
+button.refresh:active, button.select-deck:active {
+  transform: translateY(0);
+  box-shadow: 0 3px 8px -3px rgba(0,0,0,0.5);
+}
+.deck-label {
+  margin-top: 1rem;
+  font-size: .85rem;
+  opacity: .75;
+}
+.current-deck {
+  font-weight: 600;
+  color: #4facfe;
+}
