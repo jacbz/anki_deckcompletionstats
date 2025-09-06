@@ -27,9 +27,13 @@ def get_config() -> dict:
     cfg = mw.addonManager.getConfig(ADDON_MODULE) or {}
     cfg.setdefault("selected_deck_id", None)
     cfg.setdefault("selected_model_id", None)
-    cfg.setdefault("selected_model_templates", None)  # list of ords or None
+    cfg.setdefault("selected_model_templates", None)
     cfg.setdefault("granularity", "days")
     cfg.setdefault("progress_forecast_enabled", False)
+    cfg.setdefault("corpus_size", 23_000_000)
+    cfg.setdefault("word_field_index", 1)
+    cfg.setdefault("raw_freq_field_index", -1)  # -1 means disabled / not set
+    cfg.setdefault("frequency_enabled", False)
     return cfg
 
 
@@ -89,6 +93,36 @@ def set_forecast_enabled(on: bool) -> None:
     set_config(cfg)
 
 
+def get_corpus_size() -> int:
+    return int(get_config().get("corpus_size", 23_000_000))
+
+
+def set_corpus_size(v: int) -> None:
+    cfg = get_config(); cfg["corpus_size"] = v; set_config(cfg)
+
+
+def get_word_field_index() -> int:
+    return int(get_config().get("word_field_index", 1))
+
+
+def set_word_field_index(i: int) -> None:
+    cfg = get_config(); cfg["word_field_index"] = i; set_config(cfg)
+
+
+def get_raw_freq_field_index() -> int:
+    return int(get_config().get("raw_freq_field_index", -1))
+
+
+def set_raw_freq_field_index(i: int) -> None:
+    cfg = get_config(); cfg["raw_freq_field_index"] = i; set_config(cfg)
+
+def is_frequency_enabled() -> bool:
+    return bool(get_config().get("frequency_enabled", False))
+
+def set_frequency_enabled(on: bool) -> None:
+    cfg = get_config(); cfg["frequency_enabled"] = on; set_config(cfg)
+
+
 def selected_deck_name() -> str:
     did = get_selected_deck_id()
     if did is None:
@@ -122,7 +156,7 @@ def show_statistics_window() -> None:
     web = AnkiWebView(dialog)
     layout.addWidget(web)
 
-    dialog.resize(800, 1000)
+    dialog.resize(1000, 800)
 
     dialog._web = web  # type: ignore[attr-defined]
     mw.statistics5000_dialog = dialog  # type: ignore[attr-defined]
@@ -159,15 +193,23 @@ def build_state_json() -> str:
         state["forecastEnabled"] = is_forecast_enabled()
         # New analytics
         state["learningHistory"] = learning_history(mid, sel, get_selected_deck_id(), get_granularity())
-        state["cumulativeFrequency"] = cumulative_frequency(mid, sel, get_selected_deck_id(), get_granularity())
-        state["timeSpent"] = time_spent_stats(mid, sel, get_selected_deck_id())
-        state["difficult"] = difficult_cards(mid, sel, get_selected_deck_id())
+        if is_frequency_enabled() and get_raw_freq_field_index() >= 0 and get_corpus_size() > 0:
+            state["cumulativeFrequency"] = cumulative_frequency(mid, sel, get_selected_deck_id(), get_granularity(), get_raw_freq_field_index(), get_corpus_size())
+        else:
+            state["cumulativeFrequency"] = {"labels": [], "series": []}
+        state["timeSpent"] = time_spent_stats(mid, sel, get_selected_deck_id(), word_field_index=get_word_field_index())
+        state["difficult"] = difficult_cards(mid, sel, get_selected_deck_id(), word_field_index=get_word_field_index())
+        state["corpusSize"] = get_corpus_size()
+        state["wordFieldIndex"] = get_word_field_index()
+        state["rawFreqFieldIndex"] = get_raw_freq_field_index()
+        state["frequencyEnabled"] = is_frequency_enabled()
     else:
         state["progress"] = {"labels": [], "series": []}
         state["learningHistory"] = {"labels": [], "series": []}
         state["cumulativeFrequency"] = {"labels": [], "series": []}
         state["timeSpent"] = {"buckets": [], "series": [], "top": {}}
         state["difficult"] = {"byTemplate": {}}
+        state["frequencyEnabled"] = is_frequency_enabled()
     return json.dumps(state)
 
 
@@ -244,6 +286,13 @@ def on_js_message(handled: Tuple[bool, Optional[str]], message: str, context):  
         if dlg:
             refresh_web(dlg)
         return (True, None)
+    if message.startswith("statistics5000_set_frequency:"):
+        flag = message.split(":",1)[1]
+        set_frequency_enabled(flag == '1')
+        dlg = getattr(mw, "statistics5000_dialog", None)
+        if dlg:
+            refresh_web(dlg)
+        return (True, None)
     return handled
 
 
@@ -304,30 +353,54 @@ def choose_model() -> None:
     if not mw.col:
         return
     models = list_models()
-    model_pairs = [(m.get("id"), m.get("name", "(Unnamed)")) for m in models]
+    model_pairs = [(m.get("id"), m.get("name", "(Unnamed)"), m) for m in models]
     model_pairs_sorted = sorted(model_pairs, key=lambda x: x[1].lower())
-    names = ["(Any Model)"] + [name for _, name in model_pairs_sorted]
+    names = ["(Any Model)"] + [name for _, name, _ in model_pairs_sorted]
 
     current_mid = get_selected_model_id()
-    current_name = model_name(current_mid)
     current_index = 0
     if current_mid is not None:
-        for i, (mid, nm) in enumerate(model_pairs_sorted, start=1):
+        for i,(mid,nm,_) in enumerate(model_pairs_sorted, start=1):
             if mid == current_mid:
-                current_index = i
-                break
+                current_index = i; break
 
     sel, ok = QInputDialog.getItem(mw, ADDON_NAME, "Select model:", names, current_index, False)
     if not ok:
         return
     if sel == "(Any Model)":
         set_selected_model_id(None)
-    else:
-        for mid, nm in model_pairs_sorted:
-            if nm == sel:
-                if mid is not None:
-                    set_selected_model_id(cast(int, mid))
-                break
+        return
+    chosen_model = None
+    for mid, nm, m in model_pairs_sorted:
+        if nm == sel:
+            chosen_model = m; set_selected_model_id(mid); break
+    if not chosen_model:
+        return
+    # Prompt for word field, raw frequency field, corpus size
+    fields = [f for f in chosen_model.get('flds', [])]
+    field_names = [f.get('name','') for f in fields]
+    # Determine sensible defaults
+    word_default_index = min(get_word_field_index(), len(field_names)-1) if field_names else 0
+    raw_default_index = min(get_raw_freq_field_index(), len(field_names)-1) if field_names else 0
+    if raw_default_index < 12 and len(field_names) > 12:
+        raw_default_index = 12
+    # Word field
+    if field_names:
+        word_field_name, ok_w = QInputDialog.getItem(mw, ADDON_NAME, "Select Word Field:", field_names, word_default_index, False)
+        if ok_w and word_field_name in field_names:
+            set_word_field_index(field_names.index(word_field_name))
+        raw_field_name, ok_r = QInputDialog.getItem(mw, ADDON_NAME, "Select Raw Frequency Field (Cancel to disable):", field_names, raw_default_index, False)
+        if ok_r and raw_field_name in field_names:
+            set_raw_freq_field_index(field_names.index(raw_field_name))
+            set_frequency_enabled(True)
+        else:
+            set_raw_freq_field_index(-1)
+            set_frequency_enabled(False)
+    # Corpus size (only if frequency enabled tentative)
+    if is_frequency_enabled():
+        corpus, ok_c = QInputDialog.getInt(mw, ADDON_NAME, "Corpus size (total words):", value=get_corpus_size(), min=1, max=1_000_000_000_000, step=1000000)
+        if ok_c:
+            set_corpus_size(corpus)
 
 
 # Register hook for bridge

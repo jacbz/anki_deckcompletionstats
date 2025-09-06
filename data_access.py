@@ -83,6 +83,9 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
     """
     if not mw.col:
         return {"labels": [], "series": []}
+    col = mw.col
+    if not getattr(col, 'db', None):
+        return {"labels": [], "series": []}
 
     # Build search query
     parts: list[str] = []
@@ -105,7 +108,7 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
         return {"labels": [], "series": []}
 
     # Earliest review per card
-    revlog_rows = mw.col.db.all(
+    revlog_rows = col.db.all(  # type: ignore[attr-defined]
         f"SELECT cid, MIN(id) FROM revlog WHERE cid IN ({','.join(str(i) for i in cids)}) GROUP BY cid"
     )
     first_map = {cid: rid for cid, rid in revlog_rows}
@@ -241,7 +244,7 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
                 base_gain = 1.0
             # If very small remaining, damp overshoot
             # Project future buckets until completion
-            forecast_cum = studied_counts[-1]
+            forecast_cum: float = float(studied_counts[-1])
             forecast_points: list[int] = []
             rem = remaining
             # Adaptive gain: gently decay if remaining is small to avoid long tail overshoot

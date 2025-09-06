@@ -35,18 +35,20 @@
     <div class="deck-label">Current deck: <span class="current-deck" id="currentDeck">(All Decks)</span></div>
     <div class="deck-label">Current model: <span class="current-deck" id="currentModel">(Any Model)</span></div>
     <div id="modelTemplates" class="templates-wrap"></div>
-    <h2 class="progress-heading">Progress</h2>
-    <canvas id="statsChart" class="chart-canvas"></canvas>
-    <label class="forecast-toggle">
-      <input type="checkbox" id="forecastToggle" onchange="toggleForecast(this.checked)"> Show forecast
-    </label>
+
+    <div class="chart-section">
+      <h2 class="progress-heading">Progress</h2>
+      <canvas id="statsChart" class="chart-canvas"></canvas>
+      <label class="forecast-toggle"><input type="checkbox" id="forecastToggle" onchange="toggleForecast(this.checked)"> Show forecast</label>
+      <label class="forecast-toggle"><input type="checkbox" id="frequencyToggle" onchange="toggleFrequency(this.checked)"> Use frequency data</label>
+    </div>
 
     <div class="chart-section" id="learningHistorySection">
       <h2>Learning History</h2>
       <canvas id="learningHistoryChart" class="chart-canvas"></canvas>
     </div>
 
-    <div class="chart-section" id="cumulativeFrequencySection">
+    <div class="chart-section" id="cumulativeFrequencySection" style="display:none;">
       <h2>Cumulative Frequency</h2>
       <canvas id="cumulativeFrequencyChart" class="chart-canvas"></canvas>
     </div>

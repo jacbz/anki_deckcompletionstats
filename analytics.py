@@ -86,7 +86,10 @@ def learning_history(model_id: Optional[int], template_ords: Optional[List[int]]
     if not cards:
         return {"labels": [], "series": []}
     cids = [c.id for c in cards]
-    revlog_rows = mw.col.db.all(
+    col = mw.col
+    if not getattr(col, 'db', None):
+        return {"labels": [], "series": []}
+    revlog_rows = col.db.all(  # type: ignore[attr-defined]
         f"SELECT cid, MIN(id) FROM revlog WHERE cid IN ({','.join(str(i) for i in cids)}) GROUP BY cid"
     )
     first_map = {cid: rid for cid, rid in revlog_rows}
@@ -121,60 +124,114 @@ def learning_history(model_id: Optional[int], template_ords: Optional[List[int]]
         series.append({"label": name_cache.get(ord_, f"Template {ord_+1}"), "data": data})
     return {"labels": labels, "series": series}
 
-# Cumulative Frequency (percent) --------------------------------------------
+# Cumulative Frequency (percent based on raw frequency field) --------------
 
-def cumulative_frequency(model_id: Optional[int], template_ords: Optional[List[int]], deck_id: Optional[int], granularity: str) -> dict:
-    # reuse learning history for counts per bucket, then cumulative & percent
-    lh = learning_history(model_id, template_ords, deck_id, granularity)
-    if not lh["labels"]:
-        return {"labels": [], "series": []}
-    series_out = []
-    for s in lh["series"]:
-        cumulative: List[int] = []
-        run = 0
-        for v in s["data"]:
-            run += v
-            cumulative.append(run)
-        if run <= 0:
-            continue
-        series_out.append({"label": s["label"], "data": [round((c/run)*100,2) for c in cumulative]})
-    return {"labels": lh["labels"], "series": series_out}
-
-# Time Spent ----------------------------------------------------------------
-TIME_BUCKETS = [
-    (0, 60, "<1m"),
-    (60, 5*60, "1-5m"),
-    (5*60, 10*60, "5-10m"),
-    (10*60, 20*60, "10-20m"),
-    (20*60, 30*60, "20-30m"),
-    (30*60, 60*60, "30-60m"),
-    (60*60, 10**12, ">60m"),
-]
-
-def time_spent_stats(model_id: Optional[int], template_ords: Optional[List[int]], deck_id: Optional[int]) -> dict:
+def cumulative_frequency(model_id: Optional[int], template_ords: Optional[List[int]], deck_id: Optional[int], granularity: str, raw_freq_field_index: int, corpus_size: int) -> dict:
     cards = _filtered_cards(model_id, template_ords, deck_id)
-    if not cards:
-        return {"buckets": [], "series": [], "top": {}}
+    if not cards or not mw.col:
+        return {"labels": [], "series": []}
+    col = mw.col
+    if not getattr(col, 'db', None):
+        return {"labels": [], "series": []}
+    # earliest review per card
     cids = [c.id for c in cards]
-    # total time per card
-    time_rows = mw.col.db.all(
-        f"SELECT cid, SUM(time) FROM revlog WHERE cid IN ({','.join(str(i) for i in cids)}) GROUP BY cid"
+    revlog_rows = col.db.all(  # type: ignore[attr-defined]
+        f"SELECT cid, MIN(id) FROM revlog WHERE cid IN ({','.join(str(i) for i in cids)}) GROUP BY cid"
     )
-    time_map = {cid: t/1000.0 for cid, t in time_rows}  # seconds
-    # template name cache
+    first_map = {cid: rid for cid, rid in revlog_rows}
+    # bucket mapping
+    bucket_dates: set[_dt.date] = set()
+    per_template_bucket_values: Dict[int, Dict[str, int]] = {}
+    # template names
     name_cache: Dict[int,str] = {}
     if model_id is not None:
         m = mw.col.models.get(NotetypeId(model_id))  # type: ignore[arg-type]
         if m:
             for t in m.get('tmpls', []):  # type: ignore
                 name_cache[t.get('ord')] = t.get('name') or f"Card {t.get('ord',0)+1}"
-    # bucket counts per template (grouped bars)
+    for c in cards:
+        rid = first_map.get(c.id)
+        if not rid:
+            continue
+        note = c.note()
+        raw_val = 0
+        try:
+            if 0 <= raw_freq_field_index < len(note.fields):
+                raw_val = int(note.fields[raw_freq_field_index] or 0)
+        except Exception:
+            raw_val = 0
+        dt = _dt.datetime.fromtimestamp(rid/1000)
+        bdate = _bucket_start(dt, granularity)
+        bucket_dates.add(bdate)
+        label = _label_from_date(bdate, granularity)
+        tmpl_map = per_template_bucket_values.setdefault(c.ord, {})
+        tmpl_map[label] = tmpl_map.get(label, 0) + raw_val
+    if not bucket_dates:
+        return {"labels": [], "series": []}
+    dates_sorted = sorted(bucket_dates)
+    labels = [_label_from_date(d, granularity) for d in dates_sorted]
+    corpus = max(1, corpus_size)
+    series = []
+    for ord_, bucket_vals in per_template_bucket_values.items():
+        running = 0
+        percents: List[float] = []
+        for lab in labels:
+            running += bucket_vals.get(lab, 0)
+            perc = min(100.0, (running / corpus) * 100.0)
+            percents.append(round(perc, 4))
+        series.append({"label": name_cache.get(ord_, f"Template {ord_+1}"), "data": percents})
+    return {"labels": labels, "series": series}
+
+# Time Spent ----------------------------------------------------------------
+TIME_BUCKETS = [
+    (0, 30, "<30s"),
+    (30, 60, "30-60s"),
+    (60, 120, "1-2m"),
+    (120, 300, "2-5m"),
+    (300, 600, "5-10m"),
+    (600, 1200, "10-20m"),
+    (1200, 1800, "20-30m"),
+    (1800, 10**12, ">30m"),
+]
+
+def _format_mmss(secs: float) -> str:
+    m = int(secs // 60)
+    s = int(secs % 60)
+    return f"{m:02d}:{s:02d}"
+
+# helper to fetch field safely
+def _safe_field(note, idx: int) -> str:
+    try:
+        if 0 <= idx < len(note.fields):
+            return note.fields[idx]
+    except Exception:
+        pass
+    return ""
+
+def time_spent_stats(model_id: Optional[int], template_ords: Optional[List[int]], deck_id: Optional[int], word_field_index: int = 1) -> dict:
+    cards = _filtered_cards(model_id, template_ords, deck_id)
+    if not cards or not mw.col:
+        return {"buckets": [], "series": [], "top": {}, "templateNames": {}}
+    col = mw.col
+    if not getattr(col, 'db', None):
+        return {"buckets": [], "series": [], "top": {}, "templateNames": {}}
+    cids = [c.id for c in cards]
+    time_rows = col.db.all(  # type: ignore[attr-defined]
+        f"SELECT cid, SUM(time) FROM revlog WHERE cid IN ({','.join(str(i) for i in cids)}) GROUP BY cid"
+    )
+    time_map = {cid: t/1000.0 for cid, t in time_rows}
+    name_cache: Dict[int,str] = {}
+    if model_id is not None:
+        m = mw.col.models.get(NotetypeId(model_id))  # type: ignore[arg-type]
+        if m:
+            for t in m.get('tmpls', []):  # type: ignore
+                name_cache[t.get('ord')] = t.get('name') or f"Card {t.get('ord',0)+1}"
     bucket_labels = [b[2] for b in TIME_BUCKETS]
     per_template_bucket: Dict[int, List[int]] = {}
     top_cards: Dict[int, List[dict]] = {}
+    per_template_times: Dict[int,List[Tuple[int,float]]] = {}
     for c in cards:
         total_sec = time_map.get(c.id, 0.0)
-        # assign bucket
         label_index = 0
         for i,(lo,hi,lab) in enumerate(TIME_BUCKETS):
             if lo <= total_sec < hi:
@@ -182,37 +239,46 @@ def time_spent_stats(model_id: Optional[int], template_ords: Optional[List[int]]
                 break
         arr = per_template_bucket.setdefault(c.ord, [0]*len(TIME_BUCKETS))
         arr[label_index] += 1
-    # top cards by time per template
-    per_template_times: Dict[int,List[Tuple[int,float]]] = {}
-    for c in cards:
-        per_template_times.setdefault(c.ord, []).append((c.id, time_map.get(c.id,0.0)))
+        per_template_times.setdefault(c.ord, []).append((c.id, total_sec))
     for ord_, lst in per_template_times.items():
         lst_sorted = sorted(lst, key=lambda x: x[1], reverse=True)[:10]
         rows = []
         for cid, secs in lst_sorted:
-            note = mw.col.get_card(cid).note()
-            front = note.fields[0] if note.fields else str(cid)
-            if len(front) > 40:
-                front = front[:37] + '…'
-            rows.append({"cid": cid, "front": front, "timeSec": round(secs,1)})
+            card = mw.col.get_card(cid)  # type: ignore[arg-type]
+            note = card.note()
+            primary = _safe_field(note, 0) or str(cid)
+            secondary = _safe_field(note, word_field_index)
+            display = primary if secondary == "" else f"#{primary} / {secondary}"
+            if len(display) > 60:
+                display = display[:57] + '…'
+            rows.append({"cid": cid, "front": display, "timeSec": _format_mmss(secs)})
         top_cards[ord_] = rows
     series = []
     for ord_, data in per_template_bucket.items():
         series.append({"label": name_cache.get(ord_, f"Template {ord_+1}"), "data": data, "ord": ord_})
-    return {"buckets": bucket_labels, "series": series, "top": top_cards}
+    return {"buckets": bucket_labels, "series": series, "top": top_cards, "templateNames": name_cache}
 
 # Difficult Cards -----------------------------------------------------------
 
-def difficult_cards(model_id: Optional[int], template_ords: Optional[List[int]], deck_id: Optional[int]) -> dict:
+def difficult_cards(model_id: Optional[int], template_ords: Optional[List[int]], deck_id: Optional[int], word_field_index: int = 1) -> dict:
     cards = _filtered_cards(model_id, template_ords, deck_id)
-    if not cards:
-        return {"byTemplate": {}}
+    if not cards or not mw.col:
+        return {"byTemplate": {}, "templateNames": {}}
+    col = mw.col
+    if not getattr(col, 'db', None):
+        return {"byTemplate": {}, "templateNames": {}}
     cids = [c.id for c in cards]
-    fail_rows = mw.col.db.all(
+    fail_rows = col.db.all(  # type: ignore[attr-defined]
         f"SELECT cid, COUNT(*) FROM revlog WHERE ease = 1 AND cid IN ({','.join(str(i) for i in cids)}) GROUP BY cid"
     )
     fail_map = {cid: cnt for cid, cnt in fail_rows}
     by_template: Dict[int,List[Tuple[int,int]]] = {}
+    name_cache: Dict[int,str] = {}
+    if model_id is not None:
+        m = mw.col.models.get(NotetypeId(model_id))  # type: ignore[arg-type]
+        if m:
+            for t in m.get('tmpls', []):  # type: ignore
+                name_cache[t.get('ord')] = t.get('name') or f"Card {t.get('ord',0)+1}"
     for c in cards:
         if c.id in fail_map:
             by_template.setdefault(c.ord, []).append((c.id, fail_map[c.id]))
@@ -221,18 +287,24 @@ def difficult_cards(model_id: Optional[int], template_ords: Optional[List[int]],
         lst_sorted = sorted(lst, key=lambda x: x[1], reverse=True)[:10]
         rows = []
         for cid, fails in lst_sorted:
-            note = mw.col.get_card(cid).note()
-            front = note.fields[0] if note.fields else str(cid)
-            if len(front) > 40:
-                front = front[:37] + '…'
-            rows.append({"cid": cid, "front": front, "failures": fails})
+            card = mw.col.get_card(cid)  # type: ignore[arg-type]
+            note = card.note()
+            primary = _safe_field(note, 0) or str(cid)
+            secondary = _safe_field(note, word_field_index)
+            display = primary if secondary == "" else f"#{primary} / {secondary}"
+            if len(display) > 60:
+                display = display[:57] + '…'
+            rows.append({"cid": cid, "front": display, "failures": fails})
         out[ord_] = rows
-    return {"byTemplate": out}
+    return {"byTemplate": out, "templateNames": name_cache}
 
 # Streak --------------------------------------------------------------------
 
 def streak_days(deck_id: Optional[int]) -> int:
     if not mw.col:
+        return 0
+    col = mw.col
+    if not getattr(col, 'db', None):
         return 0
     parts: List[str] = []
     if deck_id is not None:
@@ -244,7 +316,7 @@ def streak_days(deck_id: Optional[int]) -> int:
     cids = mw.col.find_cards(query) if query else mw.col.find_cards("")
     if not cids:
         return 0
-    rev_rows = mw.col.db.all(
+    rev_rows = col.db.all(  # type: ignore[attr-defined]
         f"SELECT id FROM revlog WHERE cid IN ({','.join(str(i) for i in cids)}) ORDER BY id DESC"
     )
     if not rev_rows:

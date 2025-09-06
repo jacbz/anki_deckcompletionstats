@@ -71,6 +71,7 @@ function saveTemplateSelection() {
 
 function changeGranularity(g) { if (typeof pycmd !== 'undefined') pycmd('statistics5000_set_granularity:' + g); }
 function toggleForecast(on) { if (typeof pycmd !== 'undefined') pycmd('statistics5000_set_forecast:' + (on ? '1':'0')); }
+function toggleFrequency(on){ if (typeof pycmd!=='undefined') pycmd('statistics5000_set_frequency:'+(on?'1':'0')); }
 
 let statistics5000Chart;
 let learningHistoryChart;
@@ -184,36 +185,27 @@ function renderTimeSpent(dataset){
   if (!ctx || typeof Chart === 'undefined') return;
   const labels = dataset.buckets || [];
   const series = dataset.series || [];
+  const nameMap = (dataset.templateNames)||{};
   const ds = series.map((s,i)=>({ label: s.label, data: s.data, backgroundColor: paletteColor(i)+'cc' }));
   const cfg = { type:'bar', data:{ labels, datasets:ds }, options:{ plugins:{ legend:{ labels:{ color:'#e6edf3', font:{ size:10 } } } }, scales:{ x:{ ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' } }, y:{ ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' } } } } };
   timeSpentChart = ensureChart(timeSpentChart, ctx, cfg);
-  // tables
   const wrap = document.getElementById('timeSpentTables');
   if (!wrap) return;
   wrap.innerHTML = '';
   const top = dataset.top || {};
+  const rowContainer = document.createElement('div');
+  rowContainer.className='flex-row';
   Object.keys(top).forEach(ord => {
-    const rows = top[ord];
-    if (!rows || !rows.length) return;
-    const div = document.createElement('div');
-    div.className = 'flex-col';
-    const h = document.createElement('div');
-    h.className='template-head';
-    h.textContent = 'Template ' + ord + ' (Top Time)';
-    div.appendChild(h);
-    const table = document.createElement('table');
-    table.className='data-table';
-    table.innerHTML = '<thead><tr><th>Card</th><th>Time (s)</th></tr></thead>';
+    const rows = top[ord]; if (!rows || !rows.length) return;
+    const div = document.createElement('div'); div.className='flex-col';
+    const h = document.createElement('div'); h.className='template-head'; h.textContent = (nameMap[ord]||('Template '+ord)) + ' (Top Time)'; div.appendChild(h);
+    const table = document.createElement('table'); table.className='data-table';
+    table.innerHTML = '<thead><tr><th>Card</th><th>Time</th></tr></thead>';
     const tb = document.createElement('tbody');
-    rows.forEach(r=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${r.front}</td><td>${r.timeSec}</td>`;
-      tb.appendChild(tr);
-    });
-    table.appendChild(tb);
-    div.appendChild(table);
-    wrap.appendChild(div);
+    rows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML = `<td>${r.front}</td><td>${r.timeSec}</td>`; tb.appendChild(tr); });
+    table.appendChild(tb); div.appendChild(table); rowContainer.appendChild(div);
   });
+  wrap.appendChild(rowContainer);
 }
 
 function renderDifficult(dataset){
@@ -221,18 +213,17 @@ function renderDifficult(dataset){
   if (!wrap) return;
   wrap.innerHTML='';
   const byT = dataset.byTemplate || {};
+  const nameMap = dataset.templateNames || {};
+  const rowContainer = document.createElement('div'); rowContainer.className='flex-row';
   Object.keys(byT).forEach(ord => {
     const rows = byT[ord]; if (!rows || !rows.length) return;
-    const div = document.createElement('div');
-    div.className='flex-col';
-    const h = document.createElement('div'); h.className='template-head'; h.textContent='Template ' + ord + ' (Failures)';
-    div.appendChild(h);
-    const table = document.createElement('table'); table.className='data-table';
-    table.innerHTML = '<thead><tr><th>Card</th><th>Failures</th></tr></thead>';
-    const tb = document.createElement('tbody');
-    rows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML = `<td>${r.front}</td><td>${r.failures}</td>`; tb.appendChild(tr); });
-    table.appendChild(tb); div.appendChild(table); wrap.appendChild(div);
+    const div = document.createElement('div'); div.className='flex-col';
+    const h = document.createElement('div'); h.className='template-head'; h.textContent=(nameMap[ord]||('Template '+ord)) + ' (Failures)'; div.appendChild(h);
+    const table = document.createElement('table'); table.className='data-table'; table.innerHTML='<thead><tr><th>Card</th><th>Failures</th></tr></thead>';
+    const tb = document.createElement('tbody'); rows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${r.front}</td><td>${r.failures}</td>`; tb.appendChild(tr); });
+    table.appendChild(tb); div.appendChild(table); rowContainer.appendChild(div);
   });
+  wrap.appendChild(rowContainer);
 }
 
 // Modify existing statistics5000UpdateState to hydrate new analytics
@@ -257,6 +248,16 @@ function statistics5000UpdateState(data) {
         sd.textContent = s.streak.toString();
         sc.style.display = s.streak > 0 ? 'inline-flex' : 'none';
       }
+    }
+    // Frequency toggle + visibility
+    const freqToggle = document.getElementById('frequencyToggle');
+    const cfSection = document.getElementById('cumulativeFrequencySection');
+    if (freqToggle && typeof s.frequencyEnabled === 'boolean') {
+      freqToggle.checked = s.frequencyEnabled;
+    }
+    if (cfSection) {
+      const hasData = s.cumulativeFrequency && s.cumulativeFrequency.labels && s.cumulativeFrequency.labels.length>0;
+      cfSection.style.display = (s.frequencyEnabled && hasData) ? '' : 'none';
     }
     if (s.progress) renderProgressChart(s.progress); // existing
     if (s.learningHistory) learningHistoryChart = renderStackedBarChart('learningHistoryChart', s.learningHistory);

@@ -2,6 +2,10 @@
   "selected_deck_id": null,
   "selected_model_id": null,
   "selected_model_templates": null,
-  "progress_granularity": "days",
-  "progress_forecast_enabled": false
+  "granularity": "days",
+  "progress_forecast_enabled": false,
+  "corpus_size": 23000000,
+  "word_field_index": 1,
+  "raw_freq_field_index": -1,
+  "frequency_enabled": false
 }
