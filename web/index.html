@@ -9,59 +9,75 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
 </head>
 <body>
-  <h1>Deck Completion Stats</h1>
-  <div id="streakContainer" class="streak-bubble" style="display:none;"><span id="streakDays">0</span><small>DAY STREAK</small></div>
-  <div class="stat-box">
-    <div class="flex-row-wrap-center" style="gap:1.5rem; flex-wrap:wrap;">
-      <div class="deck-label" id="deckLine">Current deck: <span id="currentDeck" class="interactive" onclick="selectDeck()">(All Decks)</span> <span id="deckCount" style="opacity:.6;"></span></div>
-      <div class="deck-label" id="modelLine">Current model: <span id="currentModel" class="interactive" onclick="selectModel()">(Any Model)</span></div>
-      <div class="deck-label" id="wordFieldLine" style="display:none;">Word field: <span id="wordFieldName" class="interactive" onclick="selectWordField()"></span></div>
-      <label class="forecast-toggle"><input type="checkbox" id="forecastToggle" onchange="toggleForecast(this.checked)"> Show forecast</label>
+  <div class="layout-header">
+    <h1>Deck Completion Stats</h1>
+    <div id="streakContainer" class="streak-flame" style="display:none;">
+      <div class="flame-core"></div>
+      <div class="streak-num" id="streakDays">0</div>
+      <div class="streak-label">DAY STREAK</div>
     </div>
+  </div>
 
-    <div class="chart-section">
-      <h2 class="progress-heading">Progress</h2>
+  <div class="settings-wrapper">
+    <div class="card settings-card fancy">
+      <div class="settings-lines">
+        <div class="setting-line" id="deckLine">Current deck: <span id="currentDeck" class="interactive" onclick="selectDeck()">(All Decks)</span> <span id="deckCount" class="muted"></span></div>
+        <div class="setting-line" id="modelLine">Current model: <span id="currentModel" class="interactive" onclick="selectModel()">(Any Model)</span></div>
+        <div class="setting-line" id="wordFieldLine" style="display:none;">Word field: <span id="wordFieldName" class="interactive" onclick="selectWordField()"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cards-container single-column">
+    <div class="card">
+      <h2 class="card-title">Progress</h2>
       <canvas id="statsChart" class="chart-canvas"></canvas>
+      <label class="forecast-toggle below"><input type="checkbox" id="forecastToggle" onchange="toggleForecast(this.checked)"> Show forecast</label>
       <div id="forecastSummaries" class="forecast-summaries" style="display:none;"></div>
     </div>
-    <div class="chart-section" id="milestonesSection" style="display:none;">
-      <h2>Milestones</h2>
+
+    <div class="card" id="milestonesSection" style="display:none;">
+      <h2 class="card-title">Milestones</h2>
       <div id="milestonesContent" class="milestones-grid"></div>
     </div>
 
-    <div class="chart-section" id="learningHistorySection">
-      <h2>Learning History</h2>
+    <div class="card" id="learningHistorySection">
+      <h2 class="card-title">Learning History</h2>
       <canvas id="learningHistoryChart" class="chart-canvas"></canvas>
     </div>
 
-    <div class="chart-section" id="timeSpentSection">
-      <h2>Time Spent on Card</h2>
+    <div class="card" id="timeSpentSection">
+      <h2 class="card-title">Time Spent on Card</h2>
       <canvas id="timeSpentChart" class="chart-canvas"></canvas>
       <div id="timeSpentTables" class="table-wrap"></div>
     </div>
 
-    <div class="chart-section" id="difficultSection">
-      <h2>Most Difficult Cards</h2>
+    <div class="card" id="difficultSection">
+      <h2 class="card-title">Most Difficult Cards</h2>
       <div id="difficultTables" class="table-wrap"></div>
     </div>
   </div>
+
   <div class="foot">Made by Jacob Zhang</div>
 
-  <!-- Floating pill with granularity + template selection -->
-  <div id="floatingControls" class="floating-pill">
-    <div class="pill-group">
-      <div class="pill-label">Granularity</div>
-      <div id="granularityRadios" class="pill-granularity">
-        <label class="granularity-radio"><input type="radio" name="granularity" value="days" onchange="changeGranularity(this.value)">Days</label>
-        <label class="granularity-radio"><input type="radio" name="granularity" value="weeks" onchange="changeGranularity(this.value)">Weeks</label>
-        <label class="granularity-radio"><input type="radio" name="granularity" value="months" onchange="changeGranularity(this.value)">Months</label>
-        <label class="granularity-radio"><input type="radio" name="granularity" value="quarters" onchange="changeGranularity(this.value)">Quarters</label>
-        <label class="granularity-radio"><input type="radio" name="granularity" value="years" onchange="changeGranularity(this.value)">Years</label>
+  <!-- Floating pill with granularity + template selection (stacked rows) -->
+  <div id="floatingControls" class="floating-pill vertical">
+    <div class="pill-toggle" onclick="togglePill()" title="Collapse / Expand"></div>
+    <div class="pill-content">
+      <div class="pill-group">
+        <div class="pill-label">Granularity</div>
+        <div id="granularityRadios" class="pill-granularity">
+          <label class="granularity-radio"><input type="radio" name="granularity" value="days" onchange="changeGranularity(this.value)">Days</label>
+          <label class="granularity-radio"><input type="radio" name="granularity" value="weeks" onchange="changeGranularity(this.value)">Weeks</label>
+          <label class="granularity-radio"><input type="radio" name="granularity" value="months" onchange="changeGranularity(this.value)">Months</label>
+          <label class="granularity-radio"><input type="radio" name="granularity" value="quarters" onchange="changeGranularity(this.value)">Quarters</label>
+          <label class="granularity-radio"><input type="radio" name="granularity" value="years" onchange="changeGranularity(this.value)">Years</label>
+        </div>
       </div>
-    </div>
-    <div class="pill-group" style="flex:1 1 auto;">
-      <div class="pill-label">Templates</div>
-      <div id="modelTemplates" class="templates-wrap"></div>
+      <div class="pill-group templates-group">
+        <div class="pill-label">Templates</div>
+        <div id="modelTemplates" class="templates-wrap"></div>
+      </div>
     </div>
   </div>
 <script src="app.js"></script>

@@ -527,4 +527,21 @@ function deckcompletionstatsUpdateState(data) {
     console.error(e);
   }
 }
-window.addEventListener("DOMContentLoaded", () => {});
+function togglePill(){ const pill=document.getElementById('floatingControls'); if(!pill) return; const content=pill.querySelector('.pill-content'); if(!content) { pill.classList.toggle('collapsed'); return; }
+  const isCollapsed = pill.classList.contains('collapsed');
+  if(isCollapsed){ // expand
+    pill.classList.remove('collapsed');
+    content.style.display='block';
+    const targetHeight = content.scrollHeight+'px';
+    content.style.maxHeight = '0px';
+    requestAnimationFrame(()=>{ content.style.transition='max-height .55s cubic-bezier(.34,1.56,.64,1), opacity .4s ease'; content.style.maxHeight = targetHeight; content.style.opacity='1'; });
+    setTimeout(()=>{ content.style.maxHeight=''; content.style.transition=''; },600);
+  } else { // collapse
+    const startHeight = content.scrollHeight+'px';
+    content.style.maxHeight = startHeight; content.style.opacity='1';
+    requestAnimationFrame(()=>{ content.style.transition='max-height .5s ease, opacity .35s ease'; content.style.maxHeight='0px'; content.style.opacity='0'; });
+    setTimeout(()=>{ pill.classList.add('collapsed'); content.style.transition=''; content.style.display=''; },520);
+  }
+}
+function animateStreak(){ const sc=document.getElementById('streakContainer'); if(sc){ sc.classList.add('animate-gradient'); } }
+window.addEventListener('DOMContentLoaded',()=>{ animateStreak(); });
