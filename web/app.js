@@ -234,37 +234,75 @@ function isoToLocale(iso){ try{ return new Date(iso).toLocaleDateString(); }catc
 function renderForecastSummaries(progress){
   const box = document.getElementById('forecastSummaries');
   if (!box) return;
-  const anyForecast = (progress.series||[]).some(s=>Array.isArray(s.forecast));
-  if (!anyForecast){ box.style.display='none'; box.innerHTML=''; return; }
   const lines = [];
   (progress.series||[]).forEach(s=>{
-    if (!Array.isArray(s.forecast)) return;
-    const idx = s.forecastCompletionIndex;
     const iso = s.forecastCompletionISO;
-    const date = iso? isoToLocale(iso): (s.forecastCompletionDate||'—');
+    if (!iso) return;
+    const date = isoToLocale(iso);
     const remaining = (s.totalCards||0) - (s.data?s.data[s.data.length-1]:0);
-    lines.push(`<div class="forecast-line"><span class="tmpl">${s.label}</span>: projected to finish <strong>${remaining<=0?'now':date}</strong></div>`);
+    lines.push(`<div class="forecast-line"><span class="tmpl">${s.label}</span>: projected to finish <strong>${remaining<=0?'(complete)':date}</strong></div>`);
   });
   box.innerHTML = lines.join('');
   box.style.display = lines.length? 'block':'none';
 }
 
 function computeMilestones(progress){
-  const milestonesBase = [1,100,500,1000];
-  const maxTotal = progress.yMaxTotal || 0;
-  for (let v=2000; v<=maxTotal; v+=1000) milestonesBase.push(v);
   const results = [];
   (progress.series||[]).forEach(s=>{
-    const studiedDates = s.studiedDates || []; // per-card chronological ISO dates
-    const msHits = [];
-    milestonesBase.forEach(m=>{
-      if (m > (s.totalCards||0) || m > studiedDates.length) return;
-      const iso = studiedDates[m-1]; // m-th card studied (1-indexed)
-      if (iso) {
-        msHits.push({ milestone: m, label: isoToLocale(iso) });
-      }
+    const studiedDates = s.studiedDates || [];
+    const total = s.totalCards || 0;
+    if (!total) return;
+    const ms = [];
+    function addMilestone(n, iso, projected){
+      if (n>total) return;
+      if (!ms.find(x=>x.milestone===n)) ms.push({ milestone:n, label: isoToLocale(iso), projected: !!projected });
+    }
+    const thresholds = [1,100,500,1000];
+    for (let v=2000; v<=total; v+=1000) thresholds.push(v);
+    thresholds.forEach(n=>{
+      if (n<=studiedDates.length){ addMilestone(n, studiedDates[n-1], false); }
     });
-    if (msHits.length) results.push({ template: s.label, hits: msHits });
+    // Projection for future milestones beyond current studied count
+    if (studiedDates.length < total){
+      // estimate rate
+      if (studiedDates.length>=2){
+        const first = new Date(studiedDates[0]);
+        const last = new Date(studiedDates[studiedDates.length-1]);
+        const days = Math.max(1,(last-first)/(1000*3600*24));
+        const rate = studiedDates.length / days; // cards per day
+        const remainingActual = total - studiedDates.length;
+        // future thresholds not yet reached
+        thresholds.filter(n=>n>studiedDates.length && n<=total).forEach(n=>{
+          const need = n - studiedDates.length;
+            const daysNeeded = need / (rate||1);
+            const projDate = new Date(last.getTime() + Math.ceil(daysNeeded)*86400000).toISOString().slice(0,10);
+            addMilestone(n, projDate, true);
+        });
+        // ensure total milestone included (not duplicated)
+        if (!thresholds.includes(total)){ thresholds.push(total); }
+        if (studiedDates.length < total){
+          const needTotal = total - studiedDates.length;
+          const daysNeededTotal = needTotal / (rate||1);
+          const projDateTotal = new Date(last.getTime() + Math.ceil(daysNeededTotal)*86400000).toISOString().slice(0,10);
+          addMilestone(total, projDateTotal, true);
+        } else {
+          addMilestone(total, studiedDates[total-1], false);
+        }
+      } else if (studiedDates.length===1){
+        // Fallback single data point: assume 1 card/day
+        const last = new Date(studiedDates[0]);
+        thresholds.filter(n=>n>1 && n<=total).forEach(n=>{
+          const projDate = new Date(last.getTime() + (n-1)*86400000).toISOString().slice(0,10);
+          addMilestone(n, projDate, true);
+        });
+        addMilestone(total, new Date(last.getTime() + (total-1)*86400000).toISOString().slice(0,10), true);
+      }
+    } else {
+      // Already complete ensure total
+      addMilestone(total, studiedDates[total-1], false);
+    }
+    ms.sort((a,b)=>a.milestone-b.milestone);
+    if (ms.length) results.push({ template: s.label, hits: ms });
   });
   return results;
 }
@@ -277,8 +315,8 @@ function renderMilestones(progress){
   if (!ms.length){ section.style.display='none'; content.innerHTML=''; return; }
   section.style.display='block';
   content.innerHTML = ms.map(group=>{
-    const rows = group.hits.map(h=>`<div class="ms-row"><span class="ms-count">#${h.milestone.toLocaleString()}</span><span class="ms-date">${h.label}</span></div>`).join('');
-    return `<div class="ms-card"><div class="ms-title">${group.template}</div>${rows||'<div class="ms-none">No milestones yet</div>'}</div>`;
+    const rows = group.hits.map(h=>`<div class="ms-row ${h.projected?'proj':''}"><span class="ms-count">#${h.milestone.toLocaleString()}</span><span class="ms-date">${h.label}${h.projected?' (projection)':''}</span></div>`).join('');
+    return `<div class="ms-card"><div class="ms-title">${group.template}</div>${rows||'<div class="ms-none">No milestones</div>'}</div>`;
   }).join('');
 }
 
@@ -311,7 +349,7 @@ function statistics5000UpdateState(data) {
     }
     if (s.progress){
       renderProgressChart(s.progress);
-      renderForecastSummaries(s.progress);
+      renderForecastSummaries(s.progress); // always
       renderMilestones(s.progress);
     }
     if (s.learningHistory) learningHistoryChart = renderStackedBarChart('learningHistoryChart', s.learningHistory);

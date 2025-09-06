@@ -342,7 +342,7 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
         full_labels = historic_labels + [label_from_date(d) for d in future_dates]
     # Global max total cards for Y-axis scaling
     global_max_total = max(template_total_cards.values()) if template_total_cards else 0
-    # Compose series entries with forecast metadata
+    # Compose series entries with forecast metadata (always compute completion date)
     series = []
     for ord_, total_cards in template_total_cards.items():
         running = 0
@@ -354,6 +354,7 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
             continue
         label_name = template_name_cache.get(ord_, f"Template {ord_+1}")
         entry: Dict[str, Any] = {"label": label_name, "data": hist_data, "totalCards": total_cards, "studiedDates": studied_dates_iso_map.get(ord_, [])}
+        # Attach forecast arrays only if forecast flag and template not complete
         if forecast and ord_ in completion_index_cache and hist_data[-1] < total_cards:
             comp_idx = completion_index_cache[ord_]
             fc = [None] * (len(hist_data)-1) + [hist_data[-1]]
@@ -361,9 +362,9 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
             if buckets_remaining < 0:
                 buckets_remaining = 0
             if buckets_remaining > 0:
-                remaining = total_cards - hist_data[-1]
+                remaining_cards = total_cards - hist_data[-1]
                 for i in range(1, buckets_remaining+1):
-                    val = hist_data[-1] + int(round(remaining * (i / buckets_remaining)))
+                    val = hist_data[-1] + int(round(remaining_cards * (i / buckets_remaining)))
                     if val > total_cards:
                         val = total_cards
                     fc.append(val)
@@ -371,14 +372,32 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
                 fc += [None]*(len(full_labels)-len(fc))
             entry["forecast"] = fc
             entry["forecastCompletionIndex"] = comp_idx if comp_idx < len(full_labels) else len(full_labels)-1
-            if 0 <= entry["forecastCompletionIndex"] < len(full_labels):
+            if 0 <= entry.get("forecastCompletionIndex", -1) < len(full_labels):
                 entry["forecastCompletionDate"] = full_labels[entry["forecastCompletionIndex"]]
-                try:
-                    # Use precise daily completion date if available
-                    precise = completion_precise_date.get(ord_)
-                    entry["forecastCompletionISO"] = precise.isoformat() if precise else full_dates[entry["forecastCompletionIndex"]].isoformat()
-                except Exception:
-                    entry["forecastCompletionISO"] = None
+        # Always compute precise completion ISO if incomplete
+        if hist_data[-1] < total_cards and studied_dates_iso_map.get(ord_):
+            dates_list_iso = studied_dates_iso_map[ord_]
+            # earliest & latest actual study dates
+            try:
+                earliest = _dt.date.fromisoformat(dates_list_iso[0])
+                latest = _dt.date.fromisoformat(dates_list_iso[-1])
+                total_studied = hist_data[-1]
+                days_elapsed = max(1, (latest - earliest).days + 1)
+                rate_per_day = total_studied / days_elapsed if days_elapsed > 0 else total_studied
+                if rate_per_day <= 0:
+                    rate_per_day = 1.0
+                remaining_cards = total_cards - total_studied
+                days_needed = remaining_cards / rate_per_day
+                completion_date_precise = latest + _dt.timedelta(days=int(days_needed + 0.999))
+                entry["forecastCompletionISO"] = completion_date_precise.isoformat()
+            except Exception:
+                entry["forecastCompletionISO"] = None
+        elif hist_data[-1] >= total_cards and studied_dates_iso_map.get(ord_):
+            # Already complete -> completion date is date of last studied card
+            try:
+                entry["forecastCompletionISO"] = studied_dates_iso_map[ord_][total_cards-1]
+            except Exception:
+                pass
         series.append(entry)
     # ISO label dates for milestones & locale formatting
     label_dates_iso = [d.isoformat() for d in full_dates]

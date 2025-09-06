@@ -287,3 +287,6 @@ button.refresh:active, button.select-deck:active {
   font-size: .6rem;
   color: #666;
 }
+.ms-row.proj {opacity:.65; font-style:italic;}
+.ms-row.proj .ms-count{color:#6fa8ff}
+.ms-row.proj .ms-date{color:#7ea6c9}
