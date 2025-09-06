@@ -13,11 +13,6 @@ function selectModel() {
     pycmd("deckcompletionstats_select_model");
   }
 }
-function selectWordField() {
-  if (window.pycmd) {
-    pycmd("deckcompletionstats_select_word_field");
-  }
-}
 
 function updateCount(v) {
   const dc = document.getElementById("deckCount");
@@ -749,17 +744,6 @@ function deckcompletionstatsUpdateState(data) {
       renderLearningHistorySummary(s.learningHistory, s.granularity || "days");
     if (s.timeSpent) renderTimeSpent(s.timeSpent); // ensure call before difficult etc.
     if (s.difficult) renderDifficult(s.difficult);
-    if (s.fieldNames) {
-      const wfl = document.getElementById("wordFieldLine");
-      if (wfl) {
-        const wordName =
-          s.wordFieldIndex >= 0 && s.fieldNames[s.wordFieldIndex]
-            ? s.fieldNames[s.wordFieldIndex]
-            : "(n/a)";
-        document.getElementById("wordFieldName").textContent = wordName;
-        wfl.style.display = "block";
-      }
-    }
     if (s.status) renderStatusCharts(s.status);
     if (s.timeStudied)
       renderTimeStudied(s.timeStudied, s.granularity || "days");

@@ -3,8 +3,5 @@
   "selected_model_id": null,
   "selected_model_templates": null,
   "granularity": "weeks",
-  "progress_forecast_enabled": false,
-  "corpus_size": 23,
-  "word_field_index": 1,
-  "raw_freq_field_index": -1
+  "progress_forecast_enabled": false
 }

@@ -37,7 +37,6 @@ def get_config() -> dict:
     cfg.setdefault("selected_model_templates", None)
     cfg.setdefault("granularity", "days")
     cfg.setdefault("progress_forecast_enabled", False)
-    cfg.setdefault("word_field_index", 1)
     return cfg
 
 
@@ -96,16 +95,6 @@ def set_forecast_enabled(on: bool) -> None:
     set_config(cfg)
 
 
-def get_word_field_index() -> int:
-    return int(get_config().get("word_field_index", 1))
-
-
-def set_word_field_index(i: int) -> None:
-    cfg = get_config()
-    cfg["word_field_index"] = i
-    set_config(cfg)
-
-
 def selected_deck_name() -> str:
     did = get_selected_deck_id()
     if did is None:
@@ -153,7 +142,6 @@ def build_state_json() -> str:
         "modelName": model_name(get_selected_model_id()),
         "granularity": get_granularity(),
         "streak": streak_days(get_selected_deck_id()),
-        "wordFieldIndex": get_word_field_index(),
     }
     mid = get_selected_model_id()
     if mid is not None:
@@ -184,7 +172,7 @@ def build_state_json() -> str:
             mid, sel, get_selected_deck_id(), get_granularity()
         )
         state["timeSpent"] = time_spent_stats(
-            mid, sel, get_selected_deck_id(), word_field_index=get_word_field_index()
+            mid, sel, get_selected_deck_id()
         )
         state["timeStudied"] = time_studied_history(
             mid, sel, get_selected_deck_id(), get_granularity()
@@ -209,7 +197,7 @@ def build_state_json() -> str:
             state["studiedCardsCount"] = 0
             state["totalStudiedSeconds"] = 0
         state["difficult"] = difficult_cards(
-            mid, sel, get_selected_deck_id(), word_field_index=get_word_field_index()
+            mid, sel, get_selected_deck_id()
         )
         from .data_access import template_status_counts
         state["status"] = template_status_counts(mid, sel, get_selected_deck_id())
@@ -271,11 +259,6 @@ def on_js_message(handled: Tuple[bool, Optional[str]], message: str, context):  
         return (True, None)
     if message == "deckcompletionstats_select_model":
         choose_model()
-        dlg = getattr(mw, "deckcompletionstats_dialog", None)
-        refresh_web(dlg) if dlg else None
-        return (True, None)
-    if message == "deckcompletionstats_select_word_field":
-        choose_word_field()
         dlg = getattr(mw, "deckcompletionstats_dialog", None)
         refresh_web(dlg) if dlg else None
         return (True, None)
@@ -379,47 +362,12 @@ def choose_model() -> None:
     if sel == "(Any Model)":
         set_selected_model_id(None)
         return
-    chosen_model = None
     for mid, nm, m in model_pairs_sorted:
         if nm == sel:
-            chosen_model = m
             set_selected_model_id(mid)
             break
-    if not chosen_model:
-        return
-    fields = [f for f in chosen_model.get("flds", [])]
-    field_names = [f.get("name", "") for f in fields]
-    if field_names:
-        default_idx = min(get_word_field_index(), len(field_names) - 1)
-        word_field_name, ok_w = QInputDialog.getItem(
-            mw, ADDON_NAME, "Select Word Field:", field_names, default_idx, False
-        )
-        if ok_w and word_field_name in field_names:
-            set_word_field_index(field_names.index(word_field_name))
     dlg = getattr(mw, "deckcompletionstats_dialog", None)
     refresh_web(dlg) if dlg else None
-
-
-def choose_word_field() -> None:
-    mid = get_selected_model_id()
-    if mid is None:
-        showInfo("Select a model first.")
-        return
-    mdl = next((m for m in list_models() if m.get("id") == mid), None)
-    if not mdl:
-        showInfo("Model not found.")
-        return
-    fields = [f for f in mdl.get("flds", [])]
-    field_names = [f.get("name", "") for f in fields]
-    if not field_names:
-        showInfo("No fields in model.")
-        return
-    default_idx = min(get_word_field_index(), len(field_names) - 1)
-    word_field_name, ok_w = QInputDialog.getItem(
-        mw, ADDON_NAME, "Select Word Field:", field_names, default_idx, False
-    )
-    if ok_w and word_field_name in field_names:
-        set_word_field_index(field_names.index(word_field_name))
 
 
 # Register hook -------------------------------------------------------------

@@ -159,7 +159,6 @@ def time_spent_stats(
     model_id: Optional[int],
     template_ords: Optional[List[int]],
     deck_id: Optional[int],
-    word_field_index: int = 1,
 ) -> dict:
     cards = _filtered_cards(model_id, template_ords, deck_id)
     if not cards or not mw.col:
@@ -227,7 +226,7 @@ def time_spent_stats(
             card = mw.col.get_card(cid)  # type: ignore[arg-type]
             note = card.note()
             primary = _safe_field(note, 0) or str(cid)
-            secondary = _safe_field(note, word_field_index)
+            secondary = _safe_field(note, 1)
             display = primary if not secondary else f"#{primary} / {secondary}"
             if len(display) > 60:
                 display = display[:57] + "…"
@@ -254,7 +253,6 @@ def difficult_cards(
     model_id: Optional[int],
     template_ords: Optional[List[int]],
     deck_id: Optional[int],
-    word_field_index: int = 1,
 ) -> dict:
     cards = _filtered_cards(model_id, template_ords, deck_id)
     if not cards or not mw.col:
@@ -281,7 +279,7 @@ def difficult_cards(
             max_fail = fails
         note = c.note()
         primary = _safe_field(note, 0) or str(c.id)
-        secondary = _safe_field(note, word_field_index)
+        secondary = _safe_field(note, 1)
         display = primary if secondary == "" else f"#{primary} / {secondary}"
         if len(display) > 60:
             display = display[:57] + "…"

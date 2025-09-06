@@ -5,8 +5,8 @@
 <title>Deck Completion Stats</title>
 <link rel="stylesheet" href="app.css" />
 <!-- Chart.js CDN -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0"></script>
 </head>
 <body>
   <h1 class="page-heading-top">Deck Completion Stats</h1>
@@ -35,7 +35,6 @@
       <div class="settings-lines">
         <div class="setting-line" id="deckLine">Current deck: <span id="currentDeck" class="interactive" onclick="selectDeck()">(All Decks)</span> <span id="deckCount" class="muted"></span></div>
         <div class="setting-line" id="modelLine">Current model: <span id="currentModel" class="interactive" onclick="selectModel()">(Any Model)</span></div>
-        <div class="setting-line" id="wordFieldLine" style="display:none;">Word field: <span id="wordFieldName" class="interactive" onclick="selectWordField()"></span></div>
       </div>
     </div>
   </div>
@@ -107,7 +106,7 @@
         </div>
       </div>
       <div class="pill-group templates-group">
-        <div class="pill-label">Templates</div>
+        <div class="pill-label">Card Types</div>
         <div id="modelTemplates" class="templates-wrap"></div>
       </div>
     </div>
