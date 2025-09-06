@@ -446,6 +446,35 @@ def template_progress(
         series.append(entry)
     # ISO label dates for milestones & locale formatting
     label_dates_iso = [d.isoformat() for d in full_dates]
+
+    # Clip trailing empty buckets (where all series lack data/forecast values)
+    last_idx_with_value = -1
+    for i in range(len(full_labels)):
+        any_val = False
+        for s in series:
+            d_list = s.get("data", [])
+            v_data = d_list[i] if i < len(d_list) else None
+            v_fc = None
+            if "forecast" in s:
+                fc_list = s.get("forecast", [])
+                v_fc = fc_list[i] if i < len(fc_list) else None
+            if isinstance(v_data, (int, float)) or isinstance(v_fc, (int, float)):
+                any_val = True
+                break
+        if any_val:
+            last_idx_with_value = i
+    if last_idx_with_value >= 0 and last_idx_with_value < len(full_labels) - 1:
+        keep = last_idx_with_value + 1
+        full_labels = full_labels[:keep]
+        label_dates_iso = label_dates_iso[:keep]
+        for s in series:
+            if "data" in s and len(s["data"]) > keep:
+                s["data"] = s["data"][:keep]
+            if "forecast" in s and len(s["forecast"]) > keep:
+                s["forecast"] = s["forecast"][:keep]
+            if "forecastCompletionIndex" in s and s["forecastCompletionIndex"] >= keep:
+                s["forecastCompletionIndex"] = keep - 1
+
     return {
         "labels": full_labels,
         "labelDates": label_dates_iso,
