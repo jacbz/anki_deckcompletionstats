@@ -232,7 +232,11 @@ def _calculate_forecast(
     template_review_dates: dict,
     bucketer: _TimeBucketer,
 ) -> tuple[list[Optional[int]], int, str, str]:
-    """Calculate forecast data for a single template."""
+    """Calculate forecast data for a single template using only last 30 days of activity.
+    
+    If there is no activity in the last 30 days, the forecast stays flat at the current level.
+    Otherwise, calculates completion rate based on cards studied in the last 30 days only.
+    """
     running = 0
     studied_counts: list[int] = []
     for lab in historic_labels:
@@ -246,14 +250,27 @@ def _calculate_forecast(
     if not dates_list:
         return [], -1, "", ""
 
-    earliest = dates_list[0]
-    latest = dates_list[-1]
-    total_studied = studied_counts[-1]
+    # Filter to only use data from the last 30 days for rate calculation
+    today = _dt.date.today()
+    thirty_days_ago = today - _dt.timedelta(days=30)
+    recent_dates = [d for d in dates_list if d >= thirty_days_ago]
+    
+    if not recent_dates:
+        # No activity in last 30 days, return flat forecast
+        fc_series = [None] * (len(studied_counts) - 1) + [studied_counts[-1]]
+        return fc_series, len(studied_counts) - 1, "", ""
+    
+    earliest = recent_dates[0]
+    latest = recent_dates[-1]
+    recent_cards_studied = len(recent_dates)
     days_elapsed = max(1, (latest - earliest).days + 1)
-    rate_per_day = total_studied / days_elapsed if days_elapsed > 0 else total_studied
+    rate_per_day = recent_cards_studied / days_elapsed if days_elapsed > 0 else recent_cards_studied
     if rate_per_day <= 0:
-        rate_per_day = 1.0
+        # No meaningful rate, return flat forecast
+        fc_series = [None] * (len(studied_counts) - 1) + [studied_counts[-1]]
+        return fc_series, len(studied_counts) - 1, "", ""
 
+    total_studied = studied_counts[-1]
     remaining = total_cards - total_studied
     days_needed = remaining / rate_per_day
     completion_date = latest + _dt.timedelta(days=int(days_needed + 0.999))
