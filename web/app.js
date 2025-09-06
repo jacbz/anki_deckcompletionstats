@@ -73,21 +73,70 @@ function changeGranularity(g) { if (typeof pycmd !== 'undefined') pycmd('statist
 function toggleForecast(on) { if (typeof pycmd !== 'undefined') pycmd('statistics5000_set_forecast:' + (on ? '1':'0')); }
 
 let statistics5000Chart;
+let learningHistoryChart;
+let cumulativeFrequencyChart;
+let timeSpentChart;
+
+function ensureChart(existing, ctx, config) {
+  if (existing) {
+    existing.config.data = config.data;
+    existing.config.options = config.options || existing.config.options;
+    existing.update();
+    return existing;
+  }
+  return new Chart(ctx, config);
+}
+
+function paletteColor(i){
+  const palette = ['#4facfe','#38f9d7','#ffb347','#ff6b6b','#a78bfa','#f472b6','#34d399','#facc15','#fb7185'];
+  return palette[i % palette.length];
+}
+
+function renderStackedBarChart(targetId, dataset) {
+  const ctx = document.getElementById(targetId);
+  if (!ctx || typeof Chart === 'undefined') return null;
+  const labels = dataset.labels || [];
+  const series = dataset.series || [];
+  const dataSets = series.map((s,i)=>({ label: s.label, data: s.data, backgroundColor: paletteColor(i)+ 'cc' }));
+  const cfg = { type: 'bar', data: { labels, datasets: dataSets }, options: { responsive: true, plugins: { legend: { labels: { color: '#e6edf3', font: { size: 10 } } } }, scales: { x: { stacked: targetId==='learningHistoryChart', ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' } }, y: { stacked: targetId==='learningHistoryChart', ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' } } } } };
+  if (targetId === 'learningHistoryChart') {
+    learningHistoryChart = ensureChart(learningHistoryChart, ctx, cfg);
+    return learningHistoryChart;
+  } else if (targetId === 'timeSpentChart') {
+    timeSpentChart = ensureChart(timeSpentChart, ctx, cfg);
+    return timeSpentChart;
+  }
+  return ensureChart(null, ctx, cfg);
+}
+
+function renderLineChart(targetId, dataset, percent=false) {
+  const ctx = document.getElementById(targetId);
+  if (!ctx || typeof Chart === 'undefined') return null;
+  const labels = dataset.labels || [];
+  const series = dataset.series || [];
+  const ds = series.map((s,i)=>({ label: s.label, data: s.data, borderColor: paletteColor(i), backgroundColor: paletteColor(i)+'33', tension:.25, fill:false, pointRadius:2, spanGaps:true }));
+  const options = { responsive:true, plugins:{ legend:{ labels:{ color:'#e6edf3', font:{ size:10 } } } }, scales:{ x:{ ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' } }, y:{ ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' }, suggestedMax: percent?100:undefined, max: percent?100:undefined } } };
+  const cfg = { type:'line', data:{ labels, datasets:ds }, options };
+  if (targetId==='statsChart') { statistics5000Chart = ensureChart(statistics5000Chart, ctx, cfg); return statistics5000Chart; }
+  if (targetId==='cumulativeFrequencyChart') { cumulativeFrequencyChart = ensureChart(cumulativeFrequencyChart, ctx, cfg); return cumulativeFrequencyChart; }
+  return ensureChart(null, ctx, cfg);
+}
+
 function renderProgressChart(progress) {
   const ctx = document.getElementById('statsChart');
   if (!ctx || typeof Chart === 'undefined') return;
-  const palette = ['#4facfe','#38f9d7','#ffb347','#ff6b6b','#a78bfa','#f472b6','#34d399'];
   const baseLabels = progress.labels || [];
   const datasets = [];
   let maxY = 0;
   const completionAnnotations = [];
   (progress.series || []).forEach((s,i) => {
     maxY = Math.max(maxY, ...(s.data||[]), ...((s.forecast||[]).filter(v=>typeof v==='number')));
+    // Actual
     datasets.push({
       label: s.label,
       data: s.data.concat(Array(Math.max(0, baseLabels.length - s.data.length)).fill(null)),
-      borderColor: palette[i % palette.length],
-      backgroundColor: palette[i % palette.length] + '33',
+      borderColor: paletteColor(i),
+      backgroundColor: paletteColor(i)+'33',
       tension: 0.25,
       pointRadius: 2,
       spanGaps: true,
@@ -99,7 +148,7 @@ function renderProgressChart(progress) {
       datasets.push({
         label: s.label + ' (forecast)',
         data: fcData,
-        borderColor: palette[i % palette.length],
+        borderColor: paletteColor(i),
         borderDash: [4,3],
         pointRadius: 0,
         spanGaps: true,
@@ -115,44 +164,78 @@ function renderProgressChart(progress) {
             type: 'point',
             xValue: baseLabels[idx],
             yValue: val,
-            backgroundColor: palette[i % palette.length],
+            backgroundColor: paletteColor(i),
             radius: 4,
             borderWidth: 0,
-            label: {
-              enabled: true,
-              display: true,
-              content: s.forecastCompletionDate || baseLabels[idx],
-              position: 'top',
-              backgroundColor: '#111826',
-              color: '#e6edf3',
-              padding: 3,
-              font: { size: 10 },
-            }
+            label: { enabled: true, display: true, content: s.forecastCompletionDate || baseLabels[idx], position: 'top', backgroundColor: '#111826', color: '#e6edf3', padding: 3, font: { size: 10 } }
           });
         }
       }
     }
   });
   const ySuggestedMax = maxY + Math.ceil(maxY*0.05);
-  const options = {
-    animation: false,
-    plugins: { legend: { labels: { color: '#e6edf3', font: { size: 10 } } }, annotation: { annotations: completionAnnotations } },
-    scales: {
-      x: { ticks: { color: '#9aa2ab', maxRotation: 60, autoSkip: true }, grid: { color: '#30363d' } },
-      y: { ticks: { color: '#9aa2ab' }, grid: { color: '#30363d' }, suggestedMax: ySuggestedMax }
-    }
-  };
-  if (statistics5000Chart) {
-    statistics5000Chart.data.labels = baseLabels;
-    statistics5000Chart.data.datasets = datasets;
-    statistics5000Chart.options = options;
-    statistics5000Chart.update();
-  } else {
-    statistics5000Chart = new Chart(ctx, { type: 'line', data: { labels: baseLabels, datasets }, options });
-  }
+  const options = { animation:false, plugins:{ legend:{ labels:{ color:'#e6edf3', font:{ size:10 } } }, annotation:{ annotations: completionAnnotations } }, scales:{ x:{ ticks:{ color:'#9aa2ab', maxRotation:60, autoSkip:true }, grid:{ color:'#30363d' } }, y:{ ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' }, suggestedMax: ySuggestedMax } } };
+  const cfg = { type:'line', data:{ labels: baseLabels, datasets }, options };
+  statistics5000Chart = ensureChart(statistics5000Chart, ctx, cfg);
 }
 
-// Extend state updater
+function renderTimeSpent(dataset){
+  const ctx = document.getElementById('timeSpentChart');
+  if (!ctx || typeof Chart === 'undefined') return;
+  const labels = dataset.buckets || [];
+  const series = dataset.series || [];
+  const ds = series.map((s,i)=>({ label: s.label, data: s.data, backgroundColor: paletteColor(i)+'cc' }));
+  const cfg = { type:'bar', data:{ labels, datasets:ds }, options:{ plugins:{ legend:{ labels:{ color:'#e6edf3', font:{ size:10 } } } }, scales:{ x:{ ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' } }, y:{ ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' } } } } };
+  timeSpentChart = ensureChart(timeSpentChart, ctx, cfg);
+  // tables
+  const wrap = document.getElementById('timeSpentTables');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const top = dataset.top || {};
+  Object.keys(top).forEach(ord => {
+    const rows = top[ord];
+    if (!rows || !rows.length) return;
+    const div = document.createElement('div');
+    div.className = 'flex-col';
+    const h = document.createElement('div');
+    h.className='template-head';
+    h.textContent = 'Template ' + ord + ' (Top Time)';
+    div.appendChild(h);
+    const table = document.createElement('table');
+    table.className='data-table';
+    table.innerHTML = '<thead><tr><th>Card</th><th>Time (s)</th></tr></thead>';
+    const tb = document.createElement('tbody');
+    rows.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${r.front}</td><td>${r.timeSec}</td>`;
+      tb.appendChild(tr);
+    });
+    table.appendChild(tb);
+    div.appendChild(table);
+    wrap.appendChild(div);
+  });
+}
+
+function renderDifficult(dataset){
+  const wrap = document.getElementById('difficultTables');
+  if (!wrap) return;
+  wrap.innerHTML='';
+  const byT = dataset.byTemplate || {};
+  Object.keys(byT).forEach(ord => {
+    const rows = byT[ord]; if (!rows || !rows.length) return;
+    const div = document.createElement('div');
+    div.className='flex-col';
+    const h = document.createElement('div'); h.className='template-head'; h.textContent='Template ' + ord + ' (Failures)';
+    div.appendChild(h);
+    const table = document.createElement('table'); table.className='data-table';
+    table.innerHTML = '<thead><tr><th>Card</th><th>Failures</th></tr></thead>';
+    const tb = document.createElement('tbody');
+    rows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML = `<td>${r.front}</td><td>${r.failures}</td>`; tb.appendChild(tr); });
+    table.appendChild(tb); div.appendChild(table); wrap.appendChild(div);
+  });
+}
+
+// Modify existing statistics5000UpdateState to hydrate new analytics
 function statistics5000UpdateState(data) {
   try {
     const s = JSON.parse(data);
@@ -166,7 +249,20 @@ function statistics5000UpdateState(data) {
     }
     const fcToggle = document.getElementById('forecastToggle');
     if (fcToggle && typeof s.forecastEnabled === 'boolean') fcToggle.checked = s.forecastEnabled;
-    if (s.progress) renderProgressChart(s.progress);
+    // Streak bubble
+    if (typeof s.streak === 'number') {
+      const sc = document.getElementById('streakContainer');
+      const sd = document.getElementById('streakDays');
+      if (sc && sd) {
+        sd.textContent = s.streak.toString();
+        sc.style.display = s.streak > 0 ? 'inline-flex' : 'none';
+      }
+    }
+    if (s.progress) renderProgressChart(s.progress); // existing
+    if (s.learningHistory) learningHistoryChart = renderStackedBarChart('learningHistoryChart', s.learningHistory);
+    if (s.cumulativeFrequency) cumulativeFrequencyChart = renderLineChart('cumulativeFrequencyChart', s.cumulativeFrequency, true);
+    if (s.timeSpent) renderTimeSpent(s.timeSpent);
+    if (s.difficult) renderDifficult(s.difficult);
   } catch (e) { console.error(e); }
 }
 

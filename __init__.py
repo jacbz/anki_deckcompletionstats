@@ -14,6 +14,7 @@ from aqt.webview import AnkiWebView
 from anki.decks import DeckId
 from anki.models import NotetypeId
 
+from .analytics import learning_history, cumulative_frequency, time_spent_stats, difficult_cards, streak_days
 from .data_access import deck_card_count, list_decks, list_models, model_templates, model_name, template_progress
 
 ADDON_NAME = "Statistics 5000"
@@ -140,6 +141,7 @@ def build_state_json() -> str:
         "deckName": selected_deck_name(),
         "modelName": model_name(get_selected_model_id()),
         "granularity": get_granularity(),
+        "streak": streak_days(get_selected_deck_id()),
     }
     mid = get_selected_model_id()
     if mid is not None:
@@ -151,12 +153,21 @@ def build_state_json() -> str:
         sel = get_selected_template_ords()
         if sel is not None:
             state["selectedTemplates"] = sel
+        # Existing progress
         progress = template_progress(mid, sel, get_selected_deck_id(), get_granularity(), forecast=is_forecast_enabled())
         state["progress"] = progress
         state["forecastEnabled"] = is_forecast_enabled()
+        # New analytics
+        state["learningHistory"] = learning_history(mid, sel, get_selected_deck_id(), get_granularity())
+        state["cumulativeFrequency"] = cumulative_frequency(mid, sel, get_selected_deck_id(), get_granularity())
+        state["timeSpent"] = time_spent_stats(mid, sel, get_selected_deck_id())
+        state["difficult"] = difficult_cards(mid, sel, get_selected_deck_id())
     else:
-        # If no specific model, we could aggregate all models later; leave empty for now
         state["progress"] = {"labels": [], "series": []}
+        state["learningHistory"] = {"labels": [], "series": []}
+        state["cumulativeFrequency"] = {"labels": [], "series": []}
+        state["timeSpent"] = {"buckets": [], "series": [], "top": {}}
+        state["difficult"] = {"byTemplate": {}}
     return json.dumps(state)
 
 
