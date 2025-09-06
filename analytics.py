@@ -338,3 +338,147 @@ def _safe_field(note, idx: int) -> str:
     except Exception:
         pass
     return ""
+
+
+def time_studied(
+    model_id: Optional[int],
+    template_ords: Optional[List[int]],
+    deck_id: Optional[int],
+    granularity: str,
+) -> dict:
+    """Return stacked time (seconds) per bucket per template plus per-template totals and summaries."""
+    cards = _filtered_cards(model_id, template_ords, deck_id)
+    if not cards or not mw.col:
+        return {"labels": [], "series": [], "totals": {}, "summaries": []}
+    col = mw.col
+    if not getattr(col, "db", None):
+        return {"labels": [], "series": [], "totals": {}, "summaries": []}
+    cids = [c.id for c in cards]
+    # Fetch all revlog rows for these cards (id=ms timestamp, time=ms spent on that answer)
+    rev_rows = col.db.all(  # type: ignore[attr-defined]
+        f"SELECT cid, id, time FROM revlog WHERE cid IN ({','.join(str(i) for i in cids)})"
+    )
+    if not rev_rows:
+        return {"labels": [], "series": [], "totals": {}, "summaries": []}
+    # Template names
+    name_cache: Dict[int, str] = {}
+    if model_id is not None:
+        m = col.models.get(NotetypeId(model_id))  # type: ignore[arg-type]
+        if m:
+            for t in m.get("tmpls", []):  # type: ignore
+                name_cache[t.get("ord")] = t.get("name") or f"Card {t.get('ord',0)+1}"
+    # Accumulate per bucket seconds
+    bucket_dates: set[_dt.date] = set()
+    per_template: Dict[int, Dict[str, float]] = {}
+    per_template_total: Dict[int, float] = {}
+    for cid, rid, t in rev_rows:
+        card = col.get_card(cid)
+        if template_ords is not None and card.ord not in (template_ords):
+            continue
+        secs = max(0.0, t / 1000.0)
+        dt = _dt.datetime.fromtimestamp(rid / 1000)
+        bdate = _bucket_start(dt, granularity)
+        bucket_dates.add(bdate)
+        label = _label_from_date(bdate, granularity)
+        dmap = per_template.setdefault(card.ord, {})
+        dmap[label] = dmap.get(label, 0.0) + secs
+        per_template_total[card.ord] = per_template_total.get(card.ord, 0.0) + secs
+    if not bucket_dates:
+        return {"labels": [], "series": [], "totals": {}, "summaries": []}
+    dates_sorted = sorted(bucket_dates)
+    today_b = _bucket_start(_dt.datetime.now(), granularity)
+    if dates_sorted and dates_sorted[-1] < today_b:
+        cur = dates_sorted[-1]
+        while cur < today_b:
+            cur = _next_bucket(cur, granularity)
+            dates_sorted.append(cur)
+    labels = [_label_from_date(d, granularity) for d in dates_sorted]
+    series: List[Dict[str, Any]] = []
+    for ord_ in sorted(per_template.keys()):
+        data = [round(per_template.get(ord_, {}).get(l, 0.0), 2) for l in labels]
+        series.append({"label": name_cache.get(ord_, f"Template {ord_+1}"), "data": data})
+    # Summaries
+    summaries: List[str] = []
+    total_overall = sum(per_template_total.values())
+    def _fmt_hours_days(sec: float) -> tuple[str, str]:
+        hours = sec / 3600.0
+        days = sec / 86400.0
+        return f"{hours:.2f}h", f"{days:.2f}d"
+    for ord_, tot_sec in sorted(per_template_total.items(), key=lambda x: -x[1]):
+        h, d = _fmt_hours_days(tot_sec)
+        summaries.append(f"You studied {name_cache.get(ord_, f'Template {ord_+1}')} for {h} ({d}).")
+    if total_overall > 0:
+        h, d = _fmt_hours_days(total_overall)
+        summaries.append(f"In total, you studied {h} ({d}).")
+    return {"labels": labels, "series": series, "totals": per_template_total, "summaries": summaries}
+
+
+def time_studied_history(
+    model_id: Optional[int],
+    template_ords: Optional[List[int]],
+    deck_id: Optional[int],
+    granularity: str,
+) -> dict:
+    """Stacked time studied per period (seconds) per template."""
+    cards = _filtered_cards(model_id, template_ords, deck_id)
+    if not cards or not mw.col:
+        return {"labels": [], "series": [], "totalsSeconds": {}, "totalSecondsAll": 0}
+    col = mw.col
+    if not getattr(col, "db", None):
+        return {"labels": [], "series": [], "totalsSeconds": {}, "totalSecondsAll": 0}
+    cids = [c.id for c in cards]
+    # revlog.time is in ms; id encodes timestamp (ms)
+    rev_rows = col.db.all(  # type: ignore[attr-defined]
+        f"SELECT cid, id, time FROM revlog WHERE cid IN ({','.join(str(i) for i in cids)})"
+    )
+    if not rev_rows:
+        return {"labels": [], "series": [], "totalsSeconds": {}, "totalSecondsAll": 0}
+    # Template name cache
+    name_cache: Dict[int, str] = {}
+    if model_id is not None:
+        m = mw.col.models.get(NotetypeId(model_id))  # type: ignore[arg-type]
+        if m:
+            for t in m.get("tmpls", []):  # type: ignore
+                name_cache[t.get("ord")] = t.get("name") or f"Card {t.get('ord',0)+1}"
+    # Organize
+    bucket_dates: set[_dt.date] = set()
+    per_template: Dict[int, Dict[str, float]] = {}
+    totals_seconds: Dict[str, float] = {}
+    template_total_seconds: Dict[int, float] = {}
+    card_template_map = {c.id: c.ord for c in cards}
+    for cid, rid, t_ms in rev_rows:
+        ord_ = card_template_map.get(cid)
+        if ord_ is None:
+            continue
+        dt = _dt.datetime.fromtimestamp(rid / 1000.0)
+        bdate = _bucket_start(dt, granularity)
+        bucket_dates.add(bdate)
+        lab = _label_from_date(bdate, granularity)
+        sec = max(0.0, (t_ms or 0) / 1000.0)
+        d = per_template.setdefault(ord_, {})
+        d[lab] = d.get(lab, 0.0) + sec
+        template_total_seconds[ord_] = template_total_seconds.get(ord_, 0.0) + sec
+    if not bucket_dates:
+        return {"labels": [], "series": [], "totalsSeconds": {}, "totalSecondsAll": 0}
+    dates_sorted = sorted(bucket_dates)
+    # extend to today bucket for plateau
+    today_b = _bucket_start(_dt.datetime.now(), granularity)
+    if dates_sorted and dates_sorted[-1] < today_b:
+        cur = dates_sorted[-1]
+        while cur < today_b:
+            cur = _next_bucket(cur, granularity)
+            dates_sorted.append(cur)
+    labels = [_label_from_date(d, granularity) for d in dates_sorted]
+    series: List[Dict[str, Any]] = []
+    for ord_ in sorted(per_template.keys()):
+        data = [round(per_template.get(ord_, {}).get(l, 0.0), 2) for l in labels]
+        label_name = name_cache.get(ord_, f"Template {ord_+1}")
+        series.append({"label": label_name, "data": data})
+        totals_seconds[label_name] = template_total_seconds.get(ord_, 0.0)
+    total_all = sum(template_total_seconds.values())
+    return {
+        "labels": labels,
+        "series": series,
+        "totalsSeconds": totals_seconds,
+        "totalSecondsAll": total_all,
+    }

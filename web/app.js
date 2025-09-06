@@ -87,6 +87,7 @@ function toggleForecast(on) {
 let deckcompletionstatsChart;
 let learningHistoryChart;
 let timeSpentChart;
+let timeStudiedChart;
 function ensureChart(existing, ctx, config) {
   if (existing) {
     existing.config.data = config.data;
@@ -512,6 +513,7 @@ function deckcompletionstatsUpdateState(data) {
       }
     }
     if (s.status) renderStatusCharts(s.status);
+    if (s.timeStudied) renderTimeStudied(s.timeStudied);
   } catch (e) {
     console.error(e);
   }
@@ -534,3 +536,28 @@ function togglePill(){ const pill=document.getElementById('floatingControls'); i
 }
 function animateStreak(){ const sc=document.getElementById('streakContainer'); if(sc){ sc.classList.add('animate-gradient'); } }
 window.addEventListener('DOMContentLoaded',()=>{ animateStreak(); });
+function formatHours(n){ return (n/3600).toFixed(2); }
+function formatDays(n){ return (n/86400).toFixed(2); }
+function renderTimeStudied(ds){
+  const section = document.getElementById('timeStudiedSection');
+  const canvas = document.getElementById('timeStudiedChart');
+  if(!section || !canvas) return;
+  const labels = ds.labels || [];
+  const series = ds.series || [];
+  if(!labels.length || !series.length){ section.style.display='none'; return; }
+  section.style.display='block';
+  const ctx = canvas.getContext('2d');
+  const single = series.length <= 1;
+  const datasets = series.map((s,i)=>({ label:s.label, data:s.data, backgroundColor: paletteColor(i) + 'cc', stack:'t' }));
+  const cfg = { type:'bar', data:{ labels, datasets }, options:{ responsive:true, plugins:{ legend:{ display:!single, labels:{ color:'#e6edf3', font:{ size:10 } } }, tooltip:{ callbacks:{ label:(c)=> `${c.dataset.label}: ${c.parsed.y}s` } } }, scales:{ x:{ stacked:true, ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' } }, y:{ stacked:true, ticks:{ color:'#9aa2ab', callback:(v)=> v + 's' }, grid:{ color:'#30363d' } } } } };
+  timeStudiedChart = ensureChart(timeStudiedChart, ctx, cfg);
+  // Summary text
+  const summaryEl = document.getElementById('timeStudiedSummary');
+  if(summaryEl){
+    const totals = ds.totalsSeconds || {};
+    const totalAll = ds.totalSecondsAll || 0;
+    const parts = Object.keys(totals).sort().map(name=>`You studied ${name} for ${formatHours(totals[name])} hours (${formatDays(totals[name])} days).`);
+    parts.push(`In total, you studied ${formatHours(totalAll)} hours (${formatDays(totalAll)} days).`);
+    summaryEl.innerHTML = parts.join(' ');
+  }
+}

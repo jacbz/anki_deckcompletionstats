@@ -14,7 +14,7 @@ from aqt.webview import AnkiWebView
 from anki.decks import DeckId
 from anki.models import NotetypeId
 
-from .analytics import learning_history, time_spent_stats, difficult_cards, streak_days
+from .analytics import learning_history, time_spent_stats, difficult_cards, streak_days, time_studied_history
 from .data_access import (
     deck_card_count,
     list_decks,
@@ -183,6 +183,9 @@ def build_state_json() -> str:
         state["learningHistory"] = learning_history(
             mid, sel, get_selected_deck_id(), get_granularity()
         )
+        state["timeStudied"] = time_studied_history(
+            mid, sel, get_selected_deck_id(), get_granularity()
+        )
         state["timeSpent"] = time_spent_stats(
             mid, sel, get_selected_deck_id(), word_field_index=get_word_field_index()
         )
@@ -196,6 +199,7 @@ def build_state_json() -> str:
             {
                 "progress": {"labels": [], "series": []},
                 "learningHistory": {"labels": [], "series": []},
+                "timeStudied": {"labels": [], "series": []},
                 "timeSpent": {"binSize":15, "labels": [], "histograms": {}, "top": {}},
                 "difficult": {"byTemplate": {}},
                 "status": {"byTemplate": {}},
