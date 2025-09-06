@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-"""Data access utilities for Deck Completion Stats.
+"""Data access utilities.
 
 All direct interaction with Anki collection objects that provides data to the UI
-should reside here to keep the main __init__ lean.
+should reside here.
 """
 import datetime as _dt
 from typing import Any, Dict, List, Optional, Tuple, cast

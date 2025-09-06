@@ -1,4 +1,4 @@
-# Deck Completion Stats
+# Deck Completion Stats for Anki
 
 An Anki add-on that provides comprehensive statistics and progress tracking.
 
@@ -38,19 +38,7 @@ Access the statistics via **Tools → Deck Completion Stats**.
 
 ## Usage
 
-Open the add-on from the Tools menu. Select a deck and note type to analyze. The add-on opens in a dedicated window with the following sections:
-
-- **Progress Chart**: Shows cumulative cards studied over time with optional forecasting
-- **Learning History**: Displays new cards studied per time period
-- **Time Analysis**: Time distribution per card and most time-consuming cards
-- **Difficult Cards**: Cards with the most failures for targeted review
-- **Status Overview**: Current distribution of card states
-
-Settings are automatically saved.
-
-## Compatibility
-
-Requires Anki 2.1.50+ with Qt6 support. Compatible with Windows, macOS, and Linux.
+Open the add-on from the Tools menu. Select a deck and note type to analyze. Settings are automatically saved.
 
 ## Development
 

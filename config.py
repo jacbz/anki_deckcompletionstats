@@ -1,4 +1,4 @@
-"""Configuration management for the Deck Completion Stats add-on."""
+"""Configuration management."""
 from __future__ import annotations
 
 from typing import Any, Optional

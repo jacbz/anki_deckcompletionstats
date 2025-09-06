@@ -119,6 +119,30 @@ h1 {
   letter-spacing: 0.8px;
 }
 
+.github-link {
+  color: var(--text-secondary);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: all var(--duration-fast) ease;
+  vertical-align: middle;
+}
+
+.github-link:hover {
+  color: var(--color-primary);
+  opacity: 1;
+  text-shadow: 0 0 8px rgba(79, 172, 254, 0.3);
+}
+
+.github-icon {
+  transition: transform var(--duration-fast) ease;
+}
+
+.github-link:hover .github-icon {
+  transform: scale(1.1);
+}
+
 .inline-note {
   font-size: 0.6rem;
   opacity: 0.6;
