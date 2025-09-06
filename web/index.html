@@ -2,47 +2,26 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>Statistics 5000</title>
+<title>Deck Completion Stats</title>
 <link rel="stylesheet" href="app.css" />
 <!-- Chart.js CDN -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
 </head>
 <body>
-  <h1>Statistics 5000</h1>
+  <h1>Deck Completion Stats</h1>
   <div id="streakContainer" class="streak-bubble" style="display:none;"><span id="streakDays">0</span><small>DAY STREAK</small></div>
   <div class="stat-box">
-    <div class="flex-col-gap">
-      <div class="flex-row-wrap-center">
-        <div class="label" style="margin:0;">Total Cards</div>
-        <div class="granularity-container">
-          <span style="opacity:.65;">Granularity:</span>
-          <div id="granularityRadios">
-            <label class="granularity-radio"><input type="radio" name="granularity" value="days" onchange="changeGranularity(this.value)">Days</label>
-            <label class="granularity-radio"><input type="radio" name="granularity" value="weeks" onchange="changeGranularity(this.value)">Weeks</label>
-            <label class="granularity-radio"><input type="radio" name="granularity" value="months" onchange="changeGranularity(this.value)">Months</label>
-            <label class="granularity-radio"><input type="radio" name="granularity" value="quarters" onchange="changeGranularity(this.value)">Quarters</label>
-            <label class="granularity-radio"><input type="radio" name="granularity" value="years" onchange="changeGranularity(this.value)">Years</label>
-          </div>
-        </div>
-      </div>
-      <div class="value" id="cardCount">0</div>
+    <div class="flex-row-wrap-center" style="gap:1.5rem; flex-wrap:wrap;">
+      <div class="deck-label" id="deckLine">Current deck: <span id="currentDeck" class="interactive" onclick="selectDeck()">(All Decks)</span> <span id="deckCount" style="opacity:.6;"></span></div>
+      <div class="deck-label" id="modelLine">Current model: <span id="currentModel" class="interactive" onclick="selectModel()">(Any Model)</span></div>
+      <div class="deck-label" id="wordFieldLine" style="display:none;">Word field: <span id="wordFieldName" class="interactive" onclick="selectWordField()"></span></div>
+      <label class="forecast-toggle"><input type="checkbox" id="forecastToggle" onchange="toggleForecast(this.checked)"> Show forecast</label>
     </div>
-    <div>
-      <button class="select-deck" onclick="selectDeck()">Select Deck</button>
-      <button class="select-deck" onclick="selectModel()">Select Model</button>
-    </div>
-    <div class="deck-label">Current deck: <span class="current-deck" id="currentDeck">(All Decks)</span></div>
-    <div class="deck-label">Current model: <span class="current-deck" id="currentModel">(Any Model)</span></div>
-    <div class="deck-label" id="fieldInfo" style="display:none;">
-      Word field: <span id="wordFieldName"></span> | Raw freq field: <span id="rawFreqFieldName"></span> | Corpus: <span id="corpusSizeMillions"></span>M
-    </div>
-    <div id="modelTemplates" class="templates-wrap"></div>
 
     <div class="chart-section">
       <h2 class="progress-heading">Progress</h2>
       <canvas id="statsChart" class="chart-canvas"></canvas>
-      <label class="forecast-toggle"><input type="checkbox" id="forecastToggle" onchange="toggleForecast(this.checked)"> Show forecast</label>
       <div id="forecastSummaries" class="forecast-summaries" style="display:none;"></div>
     </div>
     <div class="chart-section" id="milestonesSection" style="display:none;">
@@ -53,11 +32,6 @@
     <div class="chart-section" id="learningHistorySection">
       <h2>Learning History</h2>
       <canvas id="learningHistoryChart" class="chart-canvas"></canvas>
-    </div>
-
-    <div class="chart-section" id="cumulativeFrequencySection" style="display:none;">
-      <h2>Cumulative Frequency</h2>
-      <canvas id="cumulativeFrequencyChart" class="chart-canvas"></canvas>
     </div>
 
     <div class="chart-section" id="timeSpentSection">
@@ -71,7 +45,25 @@
       <div id="difficultTables" class="table-wrap"></div>
     </div>
   </div>
-  <div class="foot">Add-on demo • Statistics 5000</div>
+  <div class="foot">Made by Jacob Zhang</div>
+
+  <!-- Floating pill with granularity + template selection -->
+  <div id="floatingControls" class="floating-pill">
+    <div class="pill-group">
+      <div class="pill-label">Granularity</div>
+      <div id="granularityRadios" class="pill-granularity">
+        <label class="granularity-radio"><input type="radio" name="granularity" value="days" onchange="changeGranularity(this.value)">Days</label>
+        <label class="granularity-radio"><input type="radio" name="granularity" value="weeks" onchange="changeGranularity(this.value)">Weeks</label>
+        <label class="granularity-radio"><input type="radio" name="granularity" value="months" onchange="changeGranularity(this.value)">Months</label>
+        <label class="granularity-radio"><input type="radio" name="granularity" value="quarters" onchange="changeGranularity(this.value)">Quarters</label>
+        <label class="granularity-radio"><input type="radio" name="granularity" value="years" onchange="changeGranularity(this.value)">Years</label>
+      </div>
+    </div>
+    <div class="pill-group" style="flex:1 1 auto;">
+      <div class="pill-label">Templates</div>
+      <div id="modelTemplates" class="templates-wrap"></div>
+    </div>
+  </div>
 <script src="app.js"></script>
 </body>
 </html>

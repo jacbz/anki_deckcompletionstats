@@ -1,5 +1,5 @@
-# Statistics 5000 Add-on
-# Adds a Tools menu item that opens a window displaying the total/selected-deck card count.
+# Deck Completion Stats Add-on
+# Adds a Tools menu item that opens a window displaying statistics.
 
 from __future__ import annotations
 
@@ -14,13 +14,20 @@ from aqt.webview import AnkiWebView
 from anki.decks import DeckId
 from anki.models import NotetypeId
 
-from .analytics import learning_history, cumulative_frequency, time_spent_stats, difficult_cards, streak_days
-from .data_access import deck_card_count, list_decks, list_models, model_templates, model_name, template_progress
+from .analytics import learning_history, time_spent_stats, difficult_cards, streak_days
+from .data_access import (
+    deck_card_count,
+    list_decks,
+    list_models,
+    model_templates,
+    model_name,
+    template_progress,
+)
 
-ADDON_NAME = "Statistics 5000"
+ADDON_NAME = "Deck Completion Stats"
 ADDON_MODULE = __name__
 
-# Config helpers
+# Config helpers -------------------------------------------------------------
 
 
 def get_config() -> dict:
@@ -30,16 +37,7 @@ def get_config() -> dict:
     cfg.setdefault("selected_model_templates", None)
     cfg.setdefault("granularity", "days")
     cfg.setdefault("progress_forecast_enabled", False)
-    cfg.setdefault("corpus_size_millions", 23.0)  # new float (millions)
-    # Backward compatibility: if old corpus_size present but no millions key explicitly set by user
-    if "corpus_size" in cfg and ("_migrated_corpus" not in cfg):
-        try:
-            old_int = int(cfg.get("corpus_size", 23_000_000))
-            if not cfg.get("corpus_size_millions_explicit", False):
-                cfg["corpus_size_millions"] = round(old_int / 1_000_000.0, 6)
-            cfg["_migrated_corpus"] = True
-        except Exception:
-            pass
+    cfg.setdefault("word_field_index", 1)
     return cfg
 
 
@@ -64,7 +62,6 @@ def get_selected_model_id() -> Optional[int]:
 def set_selected_model_id(mid: Optional[int]) -> None:
     cfg = get_config()
     cfg["selected_model_id"] = mid
-    # Reset template selection when model changes
     cfg["selected_model_templates"] = None
     set_config(cfg)
 
@@ -99,44 +96,14 @@ def set_forecast_enabled(on: bool) -> None:
     set_config(cfg)
 
 
-def get_corpus_size() -> int:
-    """Return corpus size in raw words (int)."""
-    cfg = get_config()
-    if "corpus_size_millions" in cfg:
-        try:
-            return int(float(cfg["corpus_size_millions"]) * 1_000_000)
-        except Exception:
-            return int(cfg.get("corpus_size", 23_000_000))
-    return int(cfg.get("corpus_size", 23_000_000))
-
-
-def get_corpus_size_millions() -> float:
-    return round(get_config().get("corpus_size_millions", 23.0), 6)
-
-
-def set_corpus_size_millions(v: float) -> None:
-    cfg = get_config()
-    cfg["corpus_size_millions"] = float(v)
-    cfg["corpus_size_millions_explicit"] = True
-    # Optionally keep old integer key synchronized (not required, but for legacy references)
-    cfg["corpus_size"] = int(float(v) * 1_000_000)
-    set_config(cfg)
-
-
 def get_word_field_index() -> int:
     return int(get_config().get("word_field_index", 1))
 
 
 def set_word_field_index(i: int) -> None:
-    cfg = get_config(); cfg["word_field_index"] = i; set_config(cfg)
-
-
-def get_raw_freq_field_index() -> int:
-    return int(get_config().get("raw_freq_field_index", -1))
-
-
-def set_raw_freq_field_index(i: int) -> None:
-    cfg = get_config(); cfg["raw_freq_field_index"] = i; set_config(cfg)
+    cfg = get_config()
+    cfg["word_field_index"] = i
+    set_config(cfg)
 
 
 def selected_deck_name() -> str:
@@ -150,33 +117,27 @@ def selected_deck_name() -> str:
     return deck["name"]
 
 
-# UI creation
+# UI creation ----------------------------------------------------------------
 
 
 def show_statistics_window() -> None:
     if not mw.col:
         return
-
-    existing = getattr(mw, "statistics5000_dialog", None)
+    existing = getattr(mw, "deckcompletionstats_dialog", None)
     if existing and existing.isVisible():
         refresh_web(existing)
         existing.raise_()
         existing.activateWindow()
         return
-
     dialog = QDialog(mw)
     dialog.setWindowTitle(ADDON_NAME)
     dialog.setModal(False)
     layout = QVBoxLayout(dialog)
-
     web = AnkiWebView(dialog)
     layout.addWidget(web)
-
     dialog.resize(1000, 800)
-
     dialog._web = web  # type: ignore[attr-defined]
-    mw.statistics5000_dialog = dialog  # type: ignore[attr-defined]
-
+    mw.deckcompletionstats_dialog = dialog  # type: ignore[attr-defined]
     load_web_content(dialog)
     dialog.show()
 
@@ -192,15 +153,15 @@ def build_state_json() -> str:
         "modelName": model_name(get_selected_model_id()),
         "granularity": get_granularity(),
         "streak": streak_days(get_selected_deck_id()),
+        "wordFieldIndex": get_word_field_index(),
     }
     mid = get_selected_model_id()
     if mid is not None:
         tmpls = model_templates(mid)
         state["templates"] = [
-            {"ord": t.get("ord"), "name": t.get("name") or f"Card {t.get('ord', 0)+1}"}
+            {"ord": t.get("ord"), "name": t.get("name") or f"Card {t.get('ord',0)+1}"}
             for t in tmpls
         ]
-        # Add field names for UI display
         try:
             mdl = next((m for m in list_models() if m.get("id") == mid), None)
             if mdl:
@@ -210,28 +171,33 @@ def build_state_json() -> str:
         sel = get_selected_template_ords()
         if sel is not None:
             state["selectedTemplates"] = sel
-        # Existing progress
-        progress = template_progress(mid, sel, get_selected_deck_id(), get_granularity(), forecast=is_forecast_enabled())
+        progress = template_progress(
+            mid,
+            sel,
+            get_selected_deck_id(),
+            get_granularity(),
+            forecast=is_forecast_enabled(),
+        )
         state["progress"] = progress
         state["forecastEnabled"] = is_forecast_enabled()
-        # New analytics
-        state["learningHistory"] = learning_history(mid, sel, get_selected_deck_id(), get_granularity())
-        if get_raw_freq_field_index() >= 0 and get_corpus_size() > 0:
-            state["cumulativeFrequency"] = cumulative_frequency(mid, sel, get_selected_deck_id(), get_granularity(), get_raw_freq_field_index(), get_corpus_size())
-        else:
-            state["cumulativeFrequency"] = {"labels": [], "series": []}
-        state["timeSpent"] = time_spent_stats(mid, sel, get_selected_deck_id(), word_field_index=get_word_field_index())
-        state["difficult"] = difficult_cards(mid, sel, get_selected_deck_id(), word_field_index=get_word_field_index())
-        state["corpusSize"] = get_corpus_size()  # words
-        state["corpusSizeMillions"] = get_corpus_size_millions()
-        state["wordFieldIndex"] = get_word_field_index()
-        state["rawFreqFieldIndex"] = get_raw_freq_field_index()
+        state["learningHistory"] = learning_history(
+            mid, sel, get_selected_deck_id(), get_granularity()
+        )
+        state["timeSpent"] = time_spent_stats(
+            mid, sel, get_selected_deck_id(), word_field_index=get_word_field_index()
+        )
+        state["difficult"] = difficult_cards(
+            mid, sel, get_selected_deck_id(), word_field_index=get_word_field_index()
+        )
     else:
-        state["progress"] = {"labels": [], "series": []}
-        state["learningHistory"] = {"labels": [], "series": []}
-        state["cumulativeFrequency"] = {"labels": [], "series": []}
-        state["timeSpent"] = {"buckets": [], "series": [], "top": {}}
-        state["difficult"] = {"byTemplate": {}}
+        state.update(
+            {
+                "progress": {"labels": [], "series": []},
+                "learningHistory": {"labels": [], "series": []},
+                "timeSpent": {"buckets": [], "series": [], "top": {}},
+                "difficult": {"byTemplate": {}},
+            }
+        )
     return json.dumps(state)
 
 
@@ -245,14 +211,14 @@ def load_web_content(dialog: QDialog) -> None:
     mw.addonManager.setWebExports(ADDON_MODULE, r"web/.*")
     html = index_path.read_text(encoding="utf-8")
     pkg = mw.addonManager.addonFromModule(ADDON_MODULE)
-    html = html.replace("href=\"app.css\"", f"href=\"/_addons/{pkg}/web/app.css\"")
-    html = html.replace("src=\"app.js\"", f"src=\"/_addons/{pkg}/web/app.js\"")
+    html = html.replace('href="app.css"', f'href="/_addons/{pkg}/web/app.css"')
+    html = html.replace('src="app.js"', f'src="/_addons/{pkg}/web/app.js"')
     web.stdHtml(html, context=None)
     inject_dynamic_state(web)
 
 
 def inject_dynamic_state(web: AnkiWebView) -> None:
-    js = f"statistics5000UpdateState({json.dumps(build_state_json())});"
+    js = f"deckcompletionstatsUpdateState({json.dumps(build_state_json())});"
     web.eval(js)
 
 
@@ -261,28 +227,30 @@ def refresh_web(dialog: QDialog) -> None:
     inject_dynamic_state(web)
 
 
-# Bridge handling
+# Bridge handling -----------------------------------------------------------
 
 
 def on_js_message(handled: Tuple[bool, Optional[str]], message: str, context):  # type: ignore[override]
-    if message == "statistics5000_refresh":
-        dlg = getattr(mw, "statistics5000_dialog", None)
-        if dlg:
-            refresh_web(dlg)
+    if message == "deckcompletionstats_refresh":
+        dlg = getattr(mw, "deckcompletionstats_dialog", None)
+        refresh_web(dlg) if dlg else None
         return (True, None)
-    if message == "statistics5000_select_deck":
+    if message == "deckcompletionstats_select_deck":
         choose_deck()
-        dlg = getattr(mw, "statistics5000_dialog", None)
-        if dlg:
-            refresh_web(dlg)
+        dlg = getattr(mw, "deckcompletionstats_dialog", None)
+        refresh_web(dlg) if dlg else None
         return (True, None)
-    if message == "statistics5000_select_model":
+    if message == "deckcompletionstats_select_model":
         choose_model()
-        dlg = getattr(mw, "statistics5000_dialog", None)
-        if dlg:
-            refresh_web(dlg)
+        dlg = getattr(mw, "deckcompletionstats_dialog", None)
+        refresh_web(dlg) if dlg else None
         return (True, None)
-    if message.startswith("statistics5000_update_templates:"):
+    if message == "deckcompletionstats_select_word_field":
+        choose_word_field()
+        dlg = getattr(mw, "deckcompletionstats_dialog", None)
+        refresh_web(dlg) if dlg else None
+        return (True, None)
+    if message.startswith("deckcompletionstats_update_templates:"):
         payload = message.split(":", 1)[1]
         try:
             ords = json.loads(payload)
@@ -290,25 +258,25 @@ def on_js_message(handled: Tuple[bool, Optional[str]], message: str, context):  
                 set_selected_template_ords([int(o) for o in ords])
         except Exception:
             pass
-        dlg = getattr(mw, "statistics5000_dialog", None)
-        if dlg:
-            refresh_web(dlg)
+        dlg = getattr(mw, "deckcompletionstats_dialog", None)
+        refresh_web(dlg) if dlg else None
         return (True, None)
-    if message.startswith("statistics5000_set_granularity:"):
-        g = message.split(":",1)[1]
+    if message.startswith("deckcompletionstats_set_granularity:"):
+        g = message.split(":", 1)[1]
         set_granularity(g)
-        dlg = getattr(mw, "statistics5000_dialog", None)
-        if dlg:
-            refresh_web(dlg)
+        dlg = getattr(mw, "deckcompletionstats_dialog", None)
+        refresh_web(dlg) if dlg else None
         return (True, None)
-    if message.startswith("statistics5000_set_forecast:"):
-        flag = message.split(":",1)[1]
-        set_forecast_enabled(flag == '1')
-        dlg = getattr(mw, "statistics5000_dialog", None)
-        if dlg:
-            refresh_web(dlg)
+    if message.startswith("deckcompletionstats_set_forecast:"):
+        flag = message.split(":", 1)[1]
+        set_forecast_enabled(flag == "1")
+        dlg = getattr(mw, "deckcompletionstats_dialog", None)
+        refresh_web(dlg) if dlg else None
         return (True, None)
     return handled
+
+
+# Selection dialogs ---------------------------------------------------------
 
 
 def choose_deck() -> None:
@@ -317,7 +285,6 @@ def choose_deck() -> None:
     decks = list_decks()
     decks_sorted = sorted(decks, key=lambda x: x[1].lower())
     names = ["All Decks"] + [name for _, name in decks_sorted]
-
     current_name = selected_deck_name()
     current_index = 0
     if current_name != "All Decks":
@@ -325,8 +292,9 @@ def choose_deck() -> None:
             if name == current_name:
                 current_index = i
                 break
-
-    name, ok = QInputDialog.getItem(mw, ADDON_NAME, "Select deck scope:", names, current_index, False)
+    name, ok = QInputDialog.getItem(
+        mw, ADDON_NAME, "Select deck scope:", names, current_index, False
+    )
     if not ok:
         return
     chosen_deck_id: Optional[int] = None
@@ -339,28 +307,24 @@ def choose_deck() -> None:
                 set_selected_deck_id(did)
                 chosen_deck_id = did
                 break
-    # If a specific deck was picked, attempt to auto-set model from first card
     if chosen_deck_id is not None and mw.col:
         deck_obj = mw.col.decks.get(cast(DeckId, chosen_deck_id))
         if deck_obj:
-            deck_name = deck_obj["name"].replace('"', '\"')
+            deck_name = deck_obj["name"].replace('"', '"')
             cids = mw.col.find_cards(f'deck:"{deck_name}"')
             if cids:
                 card = mw.col.get_card(cids[0])
                 try:
                     note = card.note()
-                    mid = getattr(note, 'mid', None)
+                    mid = getattr(note, "mid", None)
                     if mid is None:
-                        # fallback via notetype lookup
-                        nt = getattr(note, 'note_type', lambda: None)()
-                        if nt:
-                            mid = nt.get('id')
+                        nt = getattr(note, "note_type", lambda: None)()
+                        mid = nt.get("id") if nt else None
                     if mid is not None:
                         set_selected_model_id(mid)
                 except Exception:
                     pass
             else:
-                # No cards -> clear model selection
                 set_selected_model_id(None)
 
 
@@ -371,15 +335,16 @@ def choose_model() -> None:
     model_pairs = [(m.get("id"), m.get("name", "(Unnamed)"), m) for m in models]
     model_pairs_sorted = sorted(model_pairs, key=lambda x: x[1].lower())
     names = ["(Any Model)"] + [name for _, name, _ in model_pairs_sorted]
-
     current_mid = get_selected_model_id()
     current_index = 0
     if current_mid is not None:
-        for i,(mid,nm,_) in enumerate(model_pairs_sorted, start=1):
+        for i, (mid, nm, _) in enumerate(model_pairs_sorted, start=1):
             if mid == current_mid:
-                current_index = i; break
-
-    sel, ok = QInputDialog.getItem(mw, ADDON_NAME, "Select model:", names, current_index, False)
+                current_index = i
+                break
+    sel, ok = QInputDialog.getItem(
+        mw, ADDON_NAME, "Select model:", names, current_index, False
+    )
     if not ok:
         return
     if sel == "(Any Model)":
@@ -388,52 +353,52 @@ def choose_model() -> None:
     chosen_model = None
     for mid, nm, m in model_pairs_sorted:
         if nm == sel:
-            chosen_model = m; set_selected_model_id(mid); break
+            chosen_model = m
+            set_selected_model_id(mid)
+            break
     if not chosen_model:
         return
-    # Prompt for word field, raw frequency field, corpus size
-    fields = [f for f in chosen_model.get('flds', [])]
-    field_names = [f.get('name','') for f in fields]
-    # Determine sensible defaults
-    word_default_index = min(get_word_field_index(), len(field_names)-1) if field_names else 0
-    raw_default_index = min(get_raw_freq_field_index(), len(field_names)-1) if field_names else 0
-    if raw_default_index < 13 and len(field_names) > 13:
-        raw_default_index = 13
-    # Word field
+    fields = [f for f in chosen_model.get("flds", [])]
+    field_names = [f.get("name", "") for f in fields]
     if field_names:
-        word_field_name, ok_w = QInputDialog.getItem(mw, ADDON_NAME, "Select Word Field:", field_names, word_default_index, False)
+        default_idx = min(get_word_field_index(), len(field_names) - 1)
+        word_field_name, ok_w = QInputDialog.getItem(
+            mw, ADDON_NAME, "Select Word Field:", field_names, default_idx, False
+        )
         if ok_w and word_field_name in field_names:
             set_word_field_index(field_names.index(word_field_name))
-        raw_field_name, ok_r = QInputDialog.getItem(mw, ADDON_NAME, "Select Raw Frequency Field (Cancel to disable):", field_names, raw_default_index, False)
-        if ok_r and raw_field_name in field_names:
-            set_raw_freq_field_index(field_names.index(raw_field_name))
-        else:
-            set_raw_freq_field_index(-1)
-    if get_raw_freq_field_index() >= 0:  # only ask corpus size if frequency active
-        corpus_millions, ok_c = QInputDialog.getDouble(
-            mw,
-            ADDON_NAME,
-            "Corpus size (millions of words):",
-            value=get_corpus_size_millions(),
-            min=0.001,
-            max=1_000_000.0,
-            decimals=3,
-        )
-        if ok_c:
-            set_corpus_size_millions(corpus_millions)
-    # Refresh the window state after model selection
-    dlg = getattr(mw, "statistics5000_dialog", None)
-    if dlg:
-        refresh_web(dlg)
+    dlg = getattr(mw, "deckcompletionstats_dialog", None)
+    refresh_web(dlg) if dlg else None
 
 
-# Register hook for bridge
-if not getattr(gui_hooks, "_statistics5000_registered", False):  # type: ignore[attr-defined]
+def choose_word_field() -> None:
+    mid = get_selected_model_id()
+    if mid is None:
+        showInfo("Select a model first.")
+        return
+    mdl = next((m for m in list_models() if m.get("id") == mid), None)
+    if not mdl:
+        showInfo("Model not found.")
+        return
+    fields = [f for f in mdl.get("flds", [])]
+    field_names = [f.get("name", "") for f in fields]
+    if not field_names:
+        showInfo("No fields in model.")
+        return
+    default_idx = min(get_word_field_index(), len(field_names) - 1)
+    word_field_name, ok_w = QInputDialog.getItem(
+        mw, ADDON_NAME, "Select Word Field:", field_names, default_idx, False
+    )
+    if ok_w and word_field_name in field_names:
+        set_word_field_index(field_names.index(word_field_name))
+
+
+# Register hook -------------------------------------------------------------
+if not getattr(gui_hooks, "_deckcompletionstats_registered", False):  # type: ignore[attr-defined]
     gui_hooks.webview_did_receive_js_message.append(on_js_message)
-    gui_hooks._statistics5000_registered = True  # type: ignore[attr-defined]
+    gui_hooks._deckcompletionstats_registered = True  # type: ignore[attr-defined]
 
-
-# Add menu action
+# Menu action ---------------------------------------------------------------
 action = QAction(ADDON_NAME, mw)
 qconnect(action.triggered, show_statistics_window)
 mw.form.menuTools.addAction(action)

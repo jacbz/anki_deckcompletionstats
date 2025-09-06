@@ -1,6 +1,6 @@
 {
-  "name": "Statistics 5000",
-  "package": "statistics5000",
+  "name": "Deck Completion Stats",
+  "package": "deckcompletionstats",
   "mod": 20250906,
   "conflicts": []
 }

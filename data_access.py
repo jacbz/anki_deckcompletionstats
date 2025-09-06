@@ -1,5 +1,6 @@
 from __future__ import annotations
-"""Data access utilities for Statistics 5000.
+
+"""Data access utilities for Deck Completion Stats.
 
 All direct interaction with Anki collection objects that provides data to the UI
 should reside here to keep the main __init__ lean.
@@ -20,7 +21,7 @@ def deck_card_count(deck_id: Optional[int]) -> int:
     deck = mw.col.decks.get(cast(DeckId, deck_id))
     if not deck:
         return mw.col.card_count()
-    deck_name = deck["name"].replace('"', '\"')
+    deck_name = deck["name"].replace('"', '"')
     query = f'deck:"{deck_name}"'
     return len(mw.col.find_cards(query))
 
@@ -34,8 +35,8 @@ def list_decks() -> list[tuple[int, str]]:
         # fallback shape
         out: list[tuple[int, str]] = []
         for d in mw.col.decks.all_names_and_ids():  # type: ignore
-            did = getattr(d, 'id', None) or getattr(d, 'did', None)
-            name = getattr(d, 'name', None)
+            did = getattr(d, "id", None) or getattr(d, "did", None)
+            name = getattr(d, "name", None)
             if did is not None and name is not None:
                 out.append((did, name))
         return out
@@ -58,7 +59,7 @@ def model_templates(model_id: int) -> list[dict[str, Any]]:
     if not m:
         return []
     # Modern Anki: templates under 'tmpls'
-    return m.get('tmpls', [])  # type: ignore[return-value]
+    return m.get("tmpls", [])  # type: ignore[return-value]
 
 
 def model_name(model_id: Optional[int]) -> str:
@@ -67,10 +68,16 @@ def model_name(model_id: Optional[int]) -> str:
     m = get_model(model_id)
     if not m:
         return "(Missing Model)"
-    return m.get('name', '(Unnamed Model)')
+    return m.get("name", "(Unnamed Model)")
 
 
-def template_progress(model_id: Optional[int], template_ords: Optional[list[int]], deck_id: Optional[int], granularity: str, forecast: bool = False) -> dict:
+def template_progress(
+    model_id: Optional[int],
+    template_ords: Optional[list[int]],
+    deck_id: Optional[int],
+    granularity: str,
+    forecast: bool = False,
+) -> dict:
     """Return cumulative counts per template per time bucket plus optional forecast.
 
     labels: full label list (includes future buckets if forecast enabled)
@@ -84,7 +91,7 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
     if not mw.col:
         return {"labels": [], "series": []}
     col = mw.col
-    if not getattr(col, 'db', None):
+    if not getattr(col, "db", None):
         return {"labels": [], "series": []}
 
     # Build search query
@@ -94,7 +101,7 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
     if deck_id is not None:
         deck = mw.col.decks.get(cast(DeckId, deck_id))
         if deck:
-            dn = deck["name"].replace('"', '\"')
+            dn = deck["name"].replace('"', '"')
             parts.append(f'deck:"{dn}"')
     query = " ".join(parts)
     cids = mw.col.find_cards(query) if query else mw.col.find_cards("")
@@ -118,8 +125,10 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
     if model_id is not None:
         m = get_model(model_id)
         if m:
-            for t in m.get('tmpls', []):  # type: ignore
-                template_name_cache[t.get('ord')] = t.get('name') or f"Card {t.get('ord',0)+1}"
+            for t in m.get("tmpls", []):  # type: ignore
+                template_name_cache[t.get("ord")] = (
+                    t.get("name") or f"Card {t.get('ord',0)+1}"
+                )
 
     # Helper conversions (unchanged)
     def label_from_date(dt: _dt.date) -> str:
@@ -131,7 +140,7 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
         if granularity == "months":
             return f"{dt.year}-{dt.month:02d}"
         if granularity == "quarters":
-            q = (dt.month - 1)//3 + 1
+            q = (dt.month - 1) // 3 + 1
             return f"{dt.year}-Q{q}"
         if granularity == "years":
             return str(dt.year)
@@ -146,7 +155,7 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
         if granularity == "months":
             return _dt.date(dt.year, dt.month, 1)
         if granularity == "quarters":
-            start_month = ((dt.month - 1)//3)*3 + 1
+            start_month = ((dt.month - 1) // 3) * 3 + 1
             return _dt.date(dt.year, start_month, 1)
         if granularity == "years":
             return _dt.date(dt.year, 1, 1)
@@ -182,7 +191,7 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
         rid = first_map.get(c.id)
         if not rid:
             continue  # not studied yet
-        dt = _dt.datetime.fromtimestamp(rid/1000)
+        dt = _dt.datetime.fromtimestamp(rid / 1000)
         bdate = bucket_start(dt)
         bucket_dates_set.add(bdate)
         label = label_from_date(bdate)
@@ -222,12 +231,15 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
             if remaining <= 0:
                 continue
             # Deltas per bucket
-            deltas = [studied_counts[i] - studied_counts[i-1] for i in range(1, len(studied_counts))]
+            deltas = [
+                studied_counts[i] - studied_counts[i - 1]
+                for i in range(1, len(studied_counts))
+            ]
             # Weighted moving average (weights 1..k for last up to 5 deltas)
             recent_d = deltas[-5:] if deltas else []
             if recent_d:
-                weights = list(range(1, len(recent_d)+1))
-                wma = sum(d*w for d, w in zip(recent_d, weights)) / sum(weights)
+                weights = list(range(1, len(recent_d) + 1))
+                wma = sum(d * w for d, w in zip(recent_d, weights)) / sum(weights)
             else:
                 wma = 1.0
             # Linear regression slope on cumulative curve (simple least squares vs index)
@@ -236,9 +248,9 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
                 xs = list(range(n))
                 sum_x = sum(xs)
                 sum_y = sum(studied_counts)
-                sum_x2 = sum(x*x for x in xs)
-                sum_xy = sum(x*y for x, y in zip(xs, studied_counts))
-                denom = (n * sum_x2 - sum_x * sum_x)
+                sum_x2 = sum(x * x for x in xs)
+                sum_xy = sum(x * y for x, y in zip(xs, studied_counts))
+                denom = n * sum_x2 - sum_x * sum_x
                 if denom != 0:
                     slope = (n * sum_xy - sum_x * sum_y) / denom
                 else:
@@ -268,10 +280,16 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
                 continue
             max_future_buckets = max(max_future_buckets, buckets_needed)
             # Series alignment: (hist_len -1) nulls, last actual, then forecast points
-            forecast_series = [None]*(len(studied_counts)-1) + [studied_counts[-1]] + forecast_points
+            forecast_series = (
+                [None] * (len(studied_counts) - 1)
+                + [studied_counts[-1]]
+                + forecast_points
+            )
             forecast_data_cache[ord_] = forecast_series
             # Completion index relative to full labels (will update after full label build); temporarily store offset position
-            completion_index_cache[ord_] = len(forecast_series) - 1  # position within forecast series itself
+            completion_index_cache[ord_] = (
+                len(forecast_series) - 1
+            )  # position within forecast series itself
 
     # Collect per-template earliest review dates for rate calculation
     template_review_dates: Dict[int, List[_dt.date]] = {}
@@ -279,7 +297,7 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
         rid = first_map.get(c.id)
         if not rid:
             continue
-        dt = _dt.datetime.fromtimestamp(rid/1000).date()
+        dt = _dt.datetime.fromtimestamp(rid / 1000).date()
         template_review_dates.setdefault(c.ord, []).append(dt)
     # Build sorted studied date ISO lists (per-card) for milestones
     studied_dates_iso_map: Dict[int, List[str]] = {}
@@ -309,15 +327,21 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
                 continue  # already complete
             total_studied = studied_counts[-1]
             days_elapsed = max(1, (latest - earliest).days + 1)
-            rate_per_day = total_studied / days_elapsed if days_elapsed > 0 else total_studied
+            rate_per_day = (
+                total_studied / days_elapsed if days_elapsed > 0 else total_studied
+            )
             if rate_per_day <= 0:
                 rate_per_day = 1.0
             remaining = total_cards - total_studied
             days_needed = remaining / rate_per_day
             completion_date = latest + _dt.timedelta(days=int(days_needed + 0.999))
-            completion_precise_date[ord_] = completion_date  # store precise (daily) completion date
+            completion_precise_date[ord_] = (
+                completion_date  # store precise (daily) completion date
+            )
             # Determine bucket start containing completion_date
-            comp_bucket_start = bucket_start(_dt.datetime.combine(completion_date, _dt.time()))
+            comp_bucket_start = bucket_start(
+                _dt.datetime.combine(completion_date, _dt.time())
+            )
             # Extend historic_dates to include bucket of completion if needed
             temp_future_dates: List[_dt.date] = []
             cur_bs = historic_dates[-1]
@@ -327,7 +351,11 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
             if temp_future_dates:
                 max_future_buckets = max(max_future_buckets, len(temp_future_dates))
             forecast_data_cache[ord_] = studied_counts  # reuse to identify last actual
-            completion_index_cache[ord_] = len(historic_labels) + len(temp_future_dates) - 1 if temp_future_dates else len(historic_labels)-1
+            completion_index_cache[ord_] = (
+                len(historic_labels) + len(temp_future_dates) - 1
+                if temp_future_dates
+                else len(historic_labels) - 1
+            )
     # Build final labels (extend by max future buckets if any forecast)
     full_labels = historic_labels
     full_dates: List[_dt.date] = historic_dates[:]
@@ -353,27 +381,38 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
         if not hist_data:
             continue
         label_name = template_name_cache.get(ord_, f"Template {ord_+1}")
-        entry: Dict[str, Any] = {"label": label_name, "data": hist_data, "totalCards": total_cards, "studiedDates": studied_dates_iso_map.get(ord_, [])}
+        entry: Dict[str, Any] = {
+            "label": label_name,
+            "data": hist_data,
+            "totalCards": total_cards,
+            "studiedDates": studied_dates_iso_map.get(ord_, []),
+        }
         # Attach forecast arrays only if forecast flag and template not complete
         if forecast and ord_ in completion_index_cache and hist_data[-1] < total_cards:
             comp_idx = completion_index_cache[ord_]
-            fc = [None] * (len(hist_data)-1) + [hist_data[-1]]
-            buckets_remaining = comp_idx - (len(hist_data)-1)
+            fc = [None] * (len(hist_data) - 1) + [hist_data[-1]]
+            buckets_remaining = comp_idx - (len(hist_data) - 1)
             if buckets_remaining < 0:
                 buckets_remaining = 0
             if buckets_remaining > 0:
                 remaining_cards = total_cards - hist_data[-1]
-                for i in range(1, buckets_remaining+1):
-                    val = hist_data[-1] + int(round(remaining_cards * (i / buckets_remaining)))
+                for i in range(1, buckets_remaining + 1):
+                    val = hist_data[-1] + int(
+                        round(remaining_cards * (i / buckets_remaining))
+                    )
                     if val > total_cards:
                         val = total_cards
                     fc.append(val)
             if len(fc) < len(full_labels):
-                fc += [None]*(len(full_labels)-len(fc))
+                fc += [None] * (len(full_labels) - len(fc))
             entry["forecast"] = fc
-            entry["forecastCompletionIndex"] = comp_idx if comp_idx < len(full_labels) else len(full_labels)-1
+            entry["forecastCompletionIndex"] = (
+                comp_idx if comp_idx < len(full_labels) else len(full_labels) - 1
+            )
             if 0 <= entry.get("forecastCompletionIndex", -1) < len(full_labels):
-                entry["forecastCompletionDate"] = full_labels[entry["forecastCompletionIndex"]]
+                entry["forecastCompletionDate"] = full_labels[
+                    entry["forecastCompletionIndex"]
+                ]
         # Always compute precise completion ISO if incomplete
         if hist_data[-1] < total_cards and studied_dates_iso_map.get(ord_):
             dates_list_iso = studied_dates_iso_map[ord_]
@@ -383,22 +422,33 @@ def template_progress(model_id: Optional[int], template_ords: Optional[list[int]
                 latest = _dt.date.fromisoformat(dates_list_iso[-1])
                 total_studied = hist_data[-1]
                 days_elapsed = max(1, (latest - earliest).days + 1)
-                rate_per_day = total_studied / days_elapsed if days_elapsed > 0 else total_studied
+                rate_per_day = (
+                    total_studied / days_elapsed if days_elapsed > 0 else total_studied
+                )
                 if rate_per_day <= 0:
                     rate_per_day = 1.0
                 remaining_cards = total_cards - total_studied
                 days_needed = remaining_cards / rate_per_day
-                completion_date_precise = latest + _dt.timedelta(days=int(days_needed + 0.999))
+                completion_date_precise = latest + _dt.timedelta(
+                    days=int(days_needed + 0.999)
+                )
                 entry["forecastCompletionISO"] = completion_date_precise.isoformat()
             except Exception:
                 entry["forecastCompletionISO"] = None
         elif hist_data[-1] >= total_cards and studied_dates_iso_map.get(ord_):
             # Already complete -> completion date is date of last studied card
             try:
-                entry["forecastCompletionISO"] = studied_dates_iso_map[ord_][total_cards-1]
+                entry["forecastCompletionISO"] = studied_dates_iso_map[ord_][
+                    total_cards - 1
+                ]
             except Exception:
                 pass
         series.append(entry)
     # ISO label dates for milestones & locale formatting
     label_dates_iso = [d.isoformat() for d in full_dates]
-    return {"labels": full_labels, "labelDates": label_dates_iso, "series": series, "yMaxTotal": global_max_total}
+    return {
+        "labels": full_labels,
+        "labelDates": label_dates_iso,
+        "series": series,
+        "yMaxTotal": global_max_total,
+    }
