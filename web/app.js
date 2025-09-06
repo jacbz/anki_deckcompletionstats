@@ -10,6 +10,12 @@ function selectDeck() {
   }
 }
 
+function selectModel() {
+  if (window.pycmd) {
+    pycmd('statistics5000_select_model');
+  }
+}
+
 function updateCount(v) {
   const el = document.getElementById('cardCount');
   if (el) {
@@ -71,7 +77,6 @@ function saveTemplateSelection() {
 
 function changeGranularity(g) { if (typeof pycmd !== 'undefined') pycmd('statistics5000_set_granularity:' + g); }
 function toggleForecast(on) { if (typeof pycmd !== 'undefined') pycmd('statistics5000_set_forecast:' + (on ? '1':'0')); }
-function toggleFrequency(on){ if (typeof pycmd!=='undefined') pycmd('statistics5000_set_frequency:'+(on?'1':'0')); }
 
 let statistics5000Chart;
 let learningHistoryChart;
@@ -240,7 +245,6 @@ function statistics5000UpdateState(data) {
     }
     const fcToggle = document.getElementById('forecastToggle');
     if (fcToggle && typeof s.forecastEnabled === 'boolean') fcToggle.checked = s.forecastEnabled;
-    // Streak bubble
     if (typeof s.streak === 'number') {
       const sc = document.getElementById('streakContainer');
       const sd = document.getElementById('streakDays');
@@ -249,17 +253,12 @@ function statistics5000UpdateState(data) {
         sc.style.display = s.streak > 0 ? 'inline-flex' : 'none';
       }
     }
-    // Frequency toggle + visibility
-    const freqToggle = document.getElementById('frequencyToggle');
     const cfSection = document.getElementById('cumulativeFrequencySection');
-    if (freqToggle && typeof s.frequencyEnabled === 'boolean') {
-      freqToggle.checked = s.frequencyEnabled;
-    }
     if (cfSection) {
       const hasData = s.cumulativeFrequency && s.cumulativeFrequency.labels && s.cumulativeFrequency.labels.length>0;
-      cfSection.style.display = (s.frequencyEnabled && hasData) ? '' : 'none';
+      cfSection.style.display = hasData ? '' : 'none';
     }
-    if (s.progress) renderProgressChart(s.progress); // existing
+    if (s.progress) renderProgressChart(s.progress);
     if (s.learningHistory) learningHistoryChart = renderStackedBarChart('learningHistoryChart', s.learningHistory);
     if (s.cumulativeFrequency) cumulativeFrequencyChart = renderLineChart('cumulativeFrequencyChart', s.cumulativeFrequency, true);
     if (s.timeSpent) renderTimeSpent(s.timeSpent);

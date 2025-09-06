@@ -30,10 +30,16 @@ def get_config() -> dict:
     cfg.setdefault("selected_model_templates", None)
     cfg.setdefault("granularity", "days")
     cfg.setdefault("progress_forecast_enabled", False)
-    cfg.setdefault("corpus_size", 23_000_000)
-    cfg.setdefault("word_field_index", 1)
-    cfg.setdefault("raw_freq_field_index", -1)  # -1 means disabled / not set
-    cfg.setdefault("frequency_enabled", False)
+    cfg.setdefault("corpus_size_millions", 23.0)  # new float (millions)
+    # Backward compatibility: if old corpus_size present but no millions key explicitly set by user
+    if "corpus_size" in cfg and ("_migrated_corpus" not in cfg):
+        try:
+            old_int = int(cfg.get("corpus_size", 23_000_000))
+            if not cfg.get("corpus_size_millions_explicit", False):
+                cfg["corpus_size_millions"] = round(old_int / 1_000_000.0, 6)
+            cfg["_migrated_corpus"] = True
+        except Exception:
+            pass
     return cfg
 
 
@@ -94,11 +100,27 @@ def set_forecast_enabled(on: bool) -> None:
 
 
 def get_corpus_size() -> int:
-    return int(get_config().get("corpus_size", 23_000_000))
+    """Return corpus size in raw words (int)."""
+    cfg = get_config()
+    if "corpus_size_millions" in cfg:
+        try:
+            return int(float(cfg["corpus_size_millions"]) * 1_000_000)
+        except Exception:
+            return int(cfg.get("corpus_size", 23_000_000))
+    return int(cfg.get("corpus_size", 23_000_000))
 
 
-def set_corpus_size(v: int) -> None:
-    cfg = get_config(); cfg["corpus_size"] = v; set_config(cfg)
+def get_corpus_size_millions() -> float:
+    return round(get_config().get("corpus_size_millions", 23.0), 6)
+
+
+def set_corpus_size_millions(v: float) -> None:
+    cfg = get_config()
+    cfg["corpus_size_millions"] = float(v)
+    cfg["corpus_size_millions_explicit"] = True
+    # Optionally keep old integer key synchronized (not required, but for legacy references)
+    cfg["corpus_size"] = int(float(v) * 1_000_000)
+    set_config(cfg)
 
 
 def get_word_field_index() -> int:
@@ -115,12 +137,6 @@ def get_raw_freq_field_index() -> int:
 
 def set_raw_freq_field_index(i: int) -> None:
     cfg = get_config(); cfg["raw_freq_field_index"] = i; set_config(cfg)
-
-def is_frequency_enabled() -> bool:
-    return bool(get_config().get("frequency_enabled", False))
-
-def set_frequency_enabled(on: bool) -> None:
-    cfg = get_config(); cfg["frequency_enabled"] = on; set_config(cfg)
 
 
 def selected_deck_name() -> str:
@@ -193,23 +209,22 @@ def build_state_json() -> str:
         state["forecastEnabled"] = is_forecast_enabled()
         # New analytics
         state["learningHistory"] = learning_history(mid, sel, get_selected_deck_id(), get_granularity())
-        if is_frequency_enabled() and get_raw_freq_field_index() >= 0 and get_corpus_size() > 0:
+        if get_raw_freq_field_index() >= 0 and get_corpus_size() > 0:
             state["cumulativeFrequency"] = cumulative_frequency(mid, sel, get_selected_deck_id(), get_granularity(), get_raw_freq_field_index(), get_corpus_size())
         else:
             state["cumulativeFrequency"] = {"labels": [], "series": []}
         state["timeSpent"] = time_spent_stats(mid, sel, get_selected_deck_id(), word_field_index=get_word_field_index())
         state["difficult"] = difficult_cards(mid, sel, get_selected_deck_id(), word_field_index=get_word_field_index())
-        state["corpusSize"] = get_corpus_size()
+        state["corpusSize"] = get_corpus_size()  # words
+        state["corpusSizeMillions"] = get_corpus_size_millions()
         state["wordFieldIndex"] = get_word_field_index()
         state["rawFreqFieldIndex"] = get_raw_freq_field_index()
-        state["frequencyEnabled"] = is_frequency_enabled()
     else:
         state["progress"] = {"labels": [], "series": []}
         state["learningHistory"] = {"labels": [], "series": []}
         state["cumulativeFrequency"] = {"labels": [], "series": []}
         state["timeSpent"] = {"buckets": [], "series": [], "top": {}}
         state["difficult"] = {"byTemplate": {}}
-        state["frequencyEnabled"] = is_frequency_enabled()
     return json.dumps(state)
 
 
@@ -282,13 +297,6 @@ def on_js_message(handled: Tuple[bool, Optional[str]], message: str, context):  
     if message.startswith("statistics5000_set_forecast:"):
         flag = message.split(":",1)[1]
         set_forecast_enabled(flag == '1')
-        dlg = getattr(mw, "statistics5000_dialog", None)
-        if dlg:
-            refresh_web(dlg)
-        return (True, None)
-    if message.startswith("statistics5000_set_frequency:"):
-        flag = message.split(":",1)[1]
-        set_frequency_enabled(flag == '1')
         dlg = getattr(mw, "statistics5000_dialog", None)
         if dlg:
             refresh_web(dlg)
@@ -382,8 +390,8 @@ def choose_model() -> None:
     # Determine sensible defaults
     word_default_index = min(get_word_field_index(), len(field_names)-1) if field_names else 0
     raw_default_index = min(get_raw_freq_field_index(), len(field_names)-1) if field_names else 0
-    if raw_default_index < 12 and len(field_names) > 12:
-        raw_default_index = 12
+    if raw_default_index < 13 and len(field_names) > 13:
+        raw_default_index = 13
     # Word field
     if field_names:
         word_field_name, ok_w = QInputDialog.getItem(mw, ADDON_NAME, "Select Word Field:", field_names, word_default_index, False)
@@ -392,15 +400,24 @@ def choose_model() -> None:
         raw_field_name, ok_r = QInputDialog.getItem(mw, ADDON_NAME, "Select Raw Frequency Field (Cancel to disable):", field_names, raw_default_index, False)
         if ok_r and raw_field_name in field_names:
             set_raw_freq_field_index(field_names.index(raw_field_name))
-            set_frequency_enabled(True)
         else:
             set_raw_freq_field_index(-1)
-            set_frequency_enabled(False)
-    # Corpus size (only if frequency enabled tentative)
-    if is_frequency_enabled():
-        corpus, ok_c = QInputDialog.getInt(mw, ADDON_NAME, "Corpus size (total words):", value=get_corpus_size(), min=1, max=1_000_000_000_000, step=1000000)
+    if get_raw_freq_field_index() >= 0:  # only ask corpus size if frequency active
+        corpus_millions, ok_c = QInputDialog.getDouble(
+            mw,
+            ADDON_NAME,
+            "Corpus size (millions of words):",
+            value=get_corpus_size_millions(),
+            min=0.001,
+            max=1_000_000.0,
+            decimals=3,
+        )
         if ok_c:
-            set_corpus_size(corpus)
+            set_corpus_size_millions(corpus_millions)
+    # Refresh the window state after model selection
+    dlg = getattr(mw, "statistics5000_dialog", None)
+    if dlg:
+        refresh_web(dlg)
 
 
 # Register hook for bridge

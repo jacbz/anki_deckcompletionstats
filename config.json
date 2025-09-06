@@ -4,8 +4,7 @@
   "selected_model_templates": null,
   "granularity": "days",
   "progress_forecast_enabled": false,
-  "corpus_size": 23000000,
+  "corpus_size": 23,
   "word_field_index": 1,
-  "raw_freq_field_index": -1,
-  "frequency_enabled": false
+  "raw_freq_field_index": -1
 }
