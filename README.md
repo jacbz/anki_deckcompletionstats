@@ -1,11 +1,14 @@
 # Deck Completion Stats
 
-An Anki add-on that provides comprehensive statistics and progress tracking for your study sessions.
+An Anki add-on that provides comprehensive statistics and progress tracking.
 
-<a href="https://lofi.jacobzhang.de/?default">
-<img src="https://i.imgur.com/MKHa15c.jpeg" width="600px"/>
-</a>
+**[View on AnkiWeb](https://ankiweb.net/shared/info/637361797?cb=1757193469006)**
 
+<div align="center">
+    <a href="https://ankiweb.net/shared/info/637361797?cb=1757193469006">
+        <img src="https://i.imgur.com/MKHa15c.jpeg" width="800" alt="Deck Completion Stats preview"/>
+    </a>
+</div>
 
 ## Features
 
@@ -28,7 +31,7 @@ An Anki add-on that provides comprehensive statistics and progress tracking for 
 
 1. Open Anki and go to **Tools → Add-ons**
 2. Click **Get Add-ons...**
-3. Enter the add-on code when available on AnkiWeb
+3. Enter the add-on code **637361797** when available on AnkiWeb
 4. Click **OK** and restart Anki
 
 Access the statistics via **Tools → Deck Completion Stats**.
