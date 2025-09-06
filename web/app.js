@@ -230,6 +230,58 @@ function renderDifficult(dataset){
   wrap.appendChild(rowContainer);
 }
 
+function isoToLocale(iso){ try{ return new Date(iso).toLocaleDateString(); }catch(e){ return iso; } }
+function renderForecastSummaries(progress){
+  const box = document.getElementById('forecastSummaries');
+  if (!box) return;
+  const anyForecast = (progress.series||[]).some(s=>Array.isArray(s.forecast));
+  if (!anyForecast){ box.style.display='none'; box.innerHTML=''; return; }
+  const lines = [];
+  (progress.series||[]).forEach(s=>{
+    if (!Array.isArray(s.forecast)) return;
+    const idx = s.forecastCompletionIndex;
+    const iso = s.forecastCompletionISO;
+    const date = iso? isoToLocale(iso): (s.forecastCompletionDate||'—');
+    const remaining = (s.totalCards||0) - (s.data?s.data[s.data.length-1]:0);
+    lines.push(`<div class="forecast-line"><span class="tmpl">${s.label}</span>: projected to finish <strong>${remaining<=0?'now':date}</strong></div>`);
+  });
+  box.innerHTML = lines.join('');
+  box.style.display = lines.length? 'block':'none';
+}
+
+function computeMilestones(progress){
+  const milestonesBase = [1,100,500,1000];
+  const maxTotal = progress.yMaxTotal || 0;
+  for (let v=2000; v<=maxTotal; v+=1000) milestonesBase.push(v);
+  const results = [];
+  (progress.series||[]).forEach(s=>{
+    const studiedDates = s.studiedDates || []; // per-card chronological ISO dates
+    const msHits = [];
+    milestonesBase.forEach(m=>{
+      if (m > (s.totalCards||0) || m > studiedDates.length) return;
+      const iso = studiedDates[m-1]; // m-th card studied (1-indexed)
+      if (iso) {
+        msHits.push({ milestone: m, label: isoToLocale(iso) });
+      }
+    });
+    if (msHits.length) results.push({ template: s.label, hits: msHits });
+  });
+  return results;
+}
+
+function renderMilestones(progress){
+  const section = document.getElementById('milestonesSection');
+  const content = document.getElementById('milestonesContent');
+  if (!section || !content){ return; }
+  const ms = computeMilestones(progress);
+  if (!ms.length){ section.style.display='none'; content.innerHTML=''; return; }
+  section.style.display='block';
+  content.innerHTML = ms.map(group=>{
+    const rows = group.hits.map(h=>`<div class="ms-row"><span class="ms-count">#${h.milestone.toLocaleString()}</span><span class="ms-date">${h.label}</span></div>`).join('');
+    return `<div class="ms-card"><div class="ms-title">${group.template}</div>${rows||'<div class="ms-none">No milestones yet</div>'}</div>`;
+  }).join('');
+}
+
 // Modify existing statistics5000UpdateState to hydrate new analytics
 function statistics5000UpdateState(data) {
   try {
@@ -257,7 +309,11 @@ function statistics5000UpdateState(data) {
       const hasData = s.cumulativeFrequency && s.cumulativeFrequency.labels && s.cumulativeFrequency.labels.length>0;
       cfSection.style.display = hasData ? '' : 'none';
     }
-    if (s.progress) renderProgressChart(s.progress);
+    if (s.progress){
+      renderProgressChart(s.progress);
+      renderForecastSummaries(s.progress);
+      renderMilestones(s.progress);
+    }
     if (s.learningHistory) learningHistoryChart = renderStackedBarChart('learningHistoryChart', s.learningHistory);
     if (s.cumulativeFrequency) cumulativeFrequencyChart = renderLineChart('cumulativeFrequencyChart', s.cumulativeFrequency, true);
     if (s.timeSpent) renderTimeSpent(s.timeSpent);

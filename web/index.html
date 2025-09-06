@@ -43,6 +43,11 @@
       <h2 class="progress-heading">Progress</h2>
       <canvas id="statsChart" class="chart-canvas"></canvas>
       <label class="forecast-toggle"><input type="checkbox" id="forecastToggle" onchange="toggleForecast(this.checked)"> Show forecast</label>
+      <div id="forecastSummaries" class="forecast-summaries" style="display:none;"></div>
+    </div>
+    <div class="chart-section" id="milestonesSection" style="display:none;">
+      <h2>Milestones</h2>
+      <div id="milestonesContent" class="milestones-grid"></div>
     </div>
 
     <div class="chart-section" id="learningHistorySection">

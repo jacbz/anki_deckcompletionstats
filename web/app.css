@@ -223,3 +223,67 @@ button.refresh:active, button.select-deck:active {
   flex: 1 1 320px;
   min-width: 260px;
 }
+.forecast-summaries {
+  margin-top: .5rem;
+  font-size: .7rem;
+  line-height: 1.3;
+  background: #1e2732;
+  padding: .5rem .75rem;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+}
+.forecast-summaries .forecast-line {
+  margin: .15rem 0;
+  color: #cbd5e1;
+}
+.forecast-summaries .tmpl {
+  color: #4facfe;
+  font-weight: 600;
+}
+.milestones-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+  margin-top: .5rem;
+}
+.ms-card {
+  background: #1e2732;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: .6rem .75rem;
+  min-width: 160px;
+  flex: 1 1 180px;
+  max-width: 260px;
+  box-shadow: 0 2px 4px rgba(0,0,0,.35);
+}
+.ms-title {
+  font-size: .75rem;
+  font-weight: 600;
+  color: #4facfe;
+  margin-bottom: .35rem;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+}
+.ms-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: .65rem;
+  padding: .15rem 0;
+  border-bottom: 1px dashed #2d3845;
+}
+.ms-row:last-child {
+  border-bottom: 0;
+}
+.ms-count {
+  font-weight: 600;
+  color: #e6edf3;
+}
+.ms-date {
+  color: #9aa2ab;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', Arial, sans-serif;
+  font-size: .62rem;
+}
+.ms-none {
+  font-size: .6rem;
+  color: #666;
+}
