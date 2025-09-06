@@ -638,7 +638,7 @@ function deckcompletionstatsUpdateState(data) {
       }
     }
     if (s.status) renderStatusCharts(s.status);
-    if (s.timeStudied) renderTimeStudied(s.timeStudied);
+    if (s.timeStudied) renderTimeStudied(s.timeStudied, s.granularity || 'days');
     // KPI boxes
     const compBox = document.getElementById("completionBox");
     const studiedBox = document.getElementById("studiedTimeBox");
@@ -732,7 +732,7 @@ function formatStudiedHoursOnly(totalSeconds) {
   const h = Math.round(totalSeconds / 3600);
   return `${h}`;
 }
-function renderTimeStudied(ds) {
+function renderTimeStudied(ds, granularity){
   const section = document.getElementById("timeStudiedSection");
   const canvas = document.getElementById("timeStudiedChart");
   if (!section || !canvas) return;
@@ -751,58 +751,9 @@ function renderTimeStudied(ds) {
     backgroundColor: paletteColor(i) + "cc",
     stack: "t",
   }));
-  // Determine max seconds and convert to hour step size (3600 secs). We'll show integer hours only.
   let maxSec = 0;
-  datasets.forEach((d) => {
-    d.data.forEach((v) => {
-      if (v > maxSec) maxSec = v;
-    });
-  });
-  const cfg = {
-    type: "bar",
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: {
-          display: !single,
-          labels: { color: "#e6edf3", font: { size: 10 } },
-        },
-        tooltip: {
-          callbacks: {
-            label: (c) => {
-              const h = Math.floor(c.parsed.y / 3600);
-              const m = Math.floor((c.parsed.y % 3600) / 60);
-              return `${c.dataset.label}: ${h}h ${m}m`;
-            },
-          },
-        },
-      },
-      scales: {
-        x: {
-          stacked: true,
-          ticks: { color: "#9aa2ab" },
-          grid: { color: "#30363d" },
-        },
-        y: {
-          stacked: true,
-          min: 0,
-          ticks: {
-            color: "#9aa2ab",
-            stepSize: 3600,
-            callback: (v) => v / 3600 + "h",
-          },
-          grid: { color: "#30363d" },
-          title: {
-            display: true,
-            text: "Hours",
-            color: "#e6edf3",
-            font: { size: 11 },
-          },
-        },
-      },
-    },
-  };
+  datasets.forEach((d) => { d.data.forEach((v) => { if (v > maxSec) maxSec = v; }); });
+  const cfg = { type: "bar", data: { labels, datasets }, options: { responsive: true, plugins: { legend: { display: !single, labels: { color: "#e6edf3", font: { size: 10 } } }, tooltip: { callbacks: { label: (c) => { const h = Math.floor(c.parsed.y / 3600); const m = Math.floor((c.parsed.y % 3600) / 60); return `${c.dataset.label}: ${h}h ${m}m`; } } } }, scales: { x: { stacked: true, ticks: { color: "#9aa2ab" }, grid: { color: "#30363d" } }, y: { stacked: true, min: 0, ticks: { color: "#9aa2ab", stepSize: 3600, callback: (v) => v / 3600 + "h" }, grid: { color: "#30363d" }, title: { display: true, text: "Hours", color: "#e6edf3", font: { size: 11 } } } } } };
   timeStudiedChart = ensureChart(timeStudiedChart, ctx, cfg);
   const summaryEl = document.getElementById("timeStudiedSummary");
   if (summaryEl) {
@@ -810,17 +761,16 @@ function renderTimeStudied(ds) {
     const totals = ds.totalsSeconds || {};
     const totalAll = ds.totalSecondsAll || 0;
     const lines = [];
+    const periodCount = labels.length || 1;
+    const unit = (granularity && granularity.endsWith('s')) ? granularity.slice(0,-1) : (granularity || 'day');
     function fmtLine(name, sec) {
       const h = Math.floor(sec / 3600);
       const m = Math.floor((sec % 3600) / 60);
       const days = (sec / 86400).toFixed(2);
-      return `<div class='summary-line'><span class='tmpl'>${name}</span>: You studied <b>${h}h ${m}m (${days} days)</b> in total.</div>`;
+      const avgMin = Math.round(sec / periodCount / 60) || 0;
+      return `<div class='summary-line'><span class='tmpl'>${name}</span>: You studied <b>${h}h ${m}m (${days} days)</b> in total. That's ${avgMin}m per ${unit}.</div>`;
     }
-    Object.keys(totals)
-      .sort()
-      .forEach((name) => {
-        lines.push(fmtLine(name, totals[name]));
-      });
+    Object.keys(totals).sort().forEach((name) => { lines.push(fmtLine(name, totals[name])); });
     lines.push(fmtLine("Total", totalAll));
     summaryEl.innerHTML = lines.join("");
   }
