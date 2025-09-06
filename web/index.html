@@ -6,21 +6,22 @@
 <link rel="stylesheet" href="app.css" />
 <!-- Chart.js CDN -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
 </head>
 <body>
   <h1>Statistics 5000</h1>
   <div class="stat-box">
-    <div style="display:flex; flex-direction:column; gap:.4rem;">
-      <div style="display:flex; flex-wrap:wrap; gap:1rem; align-items:center;">
+    <div class="flex-col-gap">
+      <div class="flex-row-wrap-center">
         <div class="label" style="margin:0;">Total Cards</div>
-        <div style="font-size:.65rem; display:flex; gap:.6rem; align-items:center; flex-wrap:wrap;">
+        <div class="granularity-container">
           <span style="opacity:.65;">Granularity:</span>
-          <div id="granularityRadios" style="display:flex; gap:.5rem;">
-            <label style="display:flex; align-items:center; gap:.2rem; font-size:.65rem;"><input type="radio" name="granularity" value="days" onchange="changeGranularity(this.value)">Days</label>
-            <label style="display:flex; align-items:center; gap:.2rem; font-size:.65rem;"><input type="radio" name="granularity" value="weeks" onchange="changeGranularity(this.value)">Weeks</label>
-            <label style="display:flex; align-items:center; gap:.2rem; font-size:.65rem;"><input type="radio" name="granularity" value="months" onchange="changeGranularity(this.value)">Months</label>
-            <label style="display:flex; align-items:center; gap:.2rem; font-size:.65rem;"><input type="radio" name="granularity" value="quarters" onchange="changeGranularity(this.value)">Quarters</label>
-            <label style="display:flex; align-items:center; gap:.2rem; font-size:.65rem;"><input type="radio" name="granularity" value="years" onchange="changeGranularity(this.value)">Years</label>
+          <div id="granularityRadios">
+            <label class="granularity-radio"><input type="radio" name="granularity" value="days" onchange="changeGranularity(this.value)">Days</label>
+            <label class="granularity-radio"><input type="radio" name="granularity" value="weeks" onchange="changeGranularity(this.value)">Weeks</label>
+            <label class="granularity-radio"><input type="radio" name="granularity" value="months" onchange="changeGranularity(this.value)">Months</label>
+            <label class="granularity-radio"><input type="radio" name="granularity" value="quarters" onchange="changeGranularity(this.value)">Quarters</label>
+            <label class="granularity-radio"><input type="radio" name="granularity" value="years" onchange="changeGranularity(this.value)">Years</label>
           </div>
         </div>
       </div>
@@ -32,9 +33,10 @@
     </div>
     <div class="deck-label">Current deck: <span class="current-deck" id="currentDeck">(All Decks)</span></div>
     <div class="deck-label">Current model: <span class="current-deck" id="currentModel">(Any Model)</span></div>
-    <div id="modelTemplates" style="margin-top:0.75rem; display:flex; flex-wrap:wrap; gap:.6rem;"></div>
-    <canvas id="statsChart" style="margin-top:1.5rem; max-width:100%; height:280px;"></canvas>
-    <label style="display:flex; align-items:center; gap:.3rem; font-size:.65rem; margin-top:.6rem;">
+    <div id="modelTemplates" class="templates-wrap"></div>
+    <h2 class="progress-heading">Progress</h2>
+    <canvas id="statsChart" class="chart-canvas"></canvas>
+    <label class="forecast-toggle">
       <input type="checkbox" id="forecastToggle" onchange="toggleForecast(this.checked)"> Show forecast
     </label>
   </div>

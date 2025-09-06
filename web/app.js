@@ -80,6 +80,7 @@ function renderProgressChart(progress) {
   const baseLabels = progress.labels || [];
   const datasets = [];
   let maxY = 0;
+  const completionAnnotations = [];
   (progress.series || []).forEach((s,i) => {
     maxY = Math.max(maxY, ...(s.data||[]), ...((s.forecast||[]).filter(v=>typeof v==='number')));
     datasets.push({
@@ -106,27 +107,48 @@ function renderProgressChart(progress) {
         tension: 0.15,
         borderWidth: 1.5,
       });
+      if (typeof s.forecastCompletionIndex === 'number' && s.forecastCompletionIndex < baseLabels.length) {
+        const idx = s.forecastCompletionIndex;
+        const val = fcData[idx];
+        if (typeof val === 'number') {
+          completionAnnotations.push({
+            type: 'point',
+            xValue: baseLabels[idx],
+            yValue: val,
+            backgroundColor: palette[i % palette.length],
+            radius: 4,
+            borderWidth: 0,
+            label: {
+              enabled: true,
+              display: true,
+              content: s.forecastCompletionDate || baseLabels[idx],
+              position: 'top',
+              backgroundColor: '#111826',
+              color: '#e6edf3',
+              padding: 3,
+              font: { size: 10 },
+            }
+          });
+        }
+      }
     }
   });
   const ySuggestedMax = maxY + Math.ceil(maxY*0.05);
+  const options = {
+    animation: false,
+    plugins: { legend: { labels: { color: '#e6edf3', font: { size: 10 } } }, annotation: { annotations: completionAnnotations } },
+    scales: {
+      x: { ticks: { color: '#9aa2ab', maxRotation: 60, autoSkip: true }, grid: { color: '#30363d' } },
+      y: { ticks: { color: '#9aa2ab' }, grid: { color: '#30363d' }, suggestedMax: ySuggestedMax }
+    }
+  };
   if (statistics5000Chart) {
     statistics5000Chart.data.labels = baseLabels;
     statistics5000Chart.data.datasets = datasets;
-    statistics5000Chart.options.scales.y.suggestedMax = ySuggestedMax;
+    statistics5000Chart.options = options;
     statistics5000Chart.update();
   } else {
-    statistics5000Chart = new Chart(ctx, {
-      type: 'line',
-      data: { labels: baseLabels, datasets },
-      options: {
-        animation: false,
-        plugins: { legend: { labels: { color: '#e6edf3', font: { size: 10 } } } },
-        scales: {
-          x: { ticks: { color: '#9aa2ab', maxRotation: 60, autoSkip: true }, grid: { color: '#30363d' } },
-          y: { ticks: { color: '#9aa2ab' }, grid: { color: '#30363d' }, suggestedMax: ySuggestedMax }
-        }
-      }
-    });
+    statistics5000Chart = new Chart(ctx, { type: 'line', data: { labels: baseLabels, datasets }, options });
   }
 }
 
