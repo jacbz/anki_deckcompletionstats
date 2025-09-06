@@ -518,11 +518,13 @@ def template_status_counts(model_id: Optional[int], template_ords: Optional[list
         st = c.type  # 0 new,1 learn,2 review,3 relearn
         if st == 0:
             key = "new"
-        elif st in (1, 3):
+        elif st == 1:
             key = "learning"
+        elif st == 3:
+            key = "relearning"
         else:
             key = "review"
-        bucket = by_t.setdefault(c.ord, {"new": 0, "learning": 0, "review": 0})
+        bucket = by_t.setdefault(c.ord, {"new": 0, "learning": 0, "relearning": 0, "review": 0})
         bucket[key] += 1
     out: Dict[int, Dict[str, Any]] = {}
     for ord_, counts in by_t.items():

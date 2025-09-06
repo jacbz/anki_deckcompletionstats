@@ -196,7 +196,7 @@ def build_state_json() -> str:
             {
                 "progress": {"labels": [], "series": []},
                 "learningHistory": {"labels": [], "series": []},
-                "timeSpent": {"buckets": [], "series": [], "top": {}},
+                "timeSpent": {"binSize":15, "labels": [], "histograms": {}, "top": {}},
                 "difficult": {"byTemplate": {}},
                 "status": {"byTemplate": {}},
             }

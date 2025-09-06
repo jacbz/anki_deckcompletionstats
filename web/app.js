@@ -237,75 +237,36 @@ function renderProgressChart(progress) {
   const cfg = { type: "line", data: { labels: baseLabels, datasets }, options };
   deckcompletionstatsChart = ensureChart(deckcompletionstatsChart, ctx, cfg);
 }
-function renderTimeSpent(dataset) {
-  const ctx = document.getElementById("timeSpentChart");
-  if (!ctx || typeof Chart === "undefined") return;
-  const labels = dataset.buckets || [];
-  const series = dataset.series || [];
-  const singleTemplate = series.length <= 1;
-  const convSeries = series.map((s) => ({
-    label: s.label,
-    data: (s.data || []).map((v) =>
-      typeof v === "number" ? +(v / 60).toFixed(2) : v
-    ),
-  }));
-  const ds = convSeries.map((s, i) => ({
-    label: s.label,
-    data: s.data,
-    backgroundColor: paletteColor(i) + "cc",
-  }));
-  const cfg = {
-    type: "bar",
-    data: { labels, datasets: ds },
-    options: {
-      plugins: {
-        legend: { display: !singleTemplate, labels: { color: "#e6edf3", font: { size: 10 } } },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y} min`,
-          },
-        },
-      },
-      scales: {
-        x: { ticks: { color: "#9aa2ab" }, grid: { color: "#30363d" } },
-        y: {
-          ticks: { color: "#9aa2ab", callback: (v) => v + " min" },
-          grid: { color: "#30363d" },
-        },
-      },
-    },
-  };
-  timeSpentChart = ensureChart(timeSpentChart, ctx, cfg);
-  const wrap = document.getElementById("timeSpentTables");
-  if (!wrap) return;
-  wrap.innerHTML = "";
+let timeHistCharts = {};
+function renderTimeSpent(dataset){
+  const wrap = document.getElementById('timeSpentCharts');
+  const tablesWrap = document.getElementById('timeSpentTables');
+  if(!wrap || !tablesWrap) return;
+  wrap.innerHTML='';
+  tablesWrap.innerHTML='';
+  const labels = dataset.labels || [];
+  const hists = dataset.histograms || {};
+  const ords = Object.keys(hists);
+  if(!ords.length){ return; }
+  // Compute global max count across all bins so y-axes align
+  let globalMax = 0;
+  ords.forEach(ord=>{ const counts = (hists[ord] && hists[ord].counts) || []; counts.forEach(v=>{ if(typeof v === 'number' && v > globalMax) globalMax = v; }); });
+  if(globalMax < 1) globalMax = 1; // avoid 0 max
+  ords.forEach((ord, idx)=>{
+    const item = hists[ord];
+    const div = document.createElement('div'); div.className='time-item';
+    const cv = document.createElement('canvas');
+    const lab = document.createElement('div'); lab.className='time-label'; lab.textContent = item.name;
+    div.appendChild(cv); div.appendChild(lab); wrap.appendChild(div);
+    const cfg = { type:'bar', data:{ labels, datasets:[{ data:item.counts, label:item.name, backgroundColor:'#4facfe66' }] }, options:{ plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:(c)=> `${c.parsed.y} cards` } } }, scales:{ x:{ ticks:{ color:'#9aa2ab', font:{ size:9 } }, grid:{ color:'#30363d' } }, y:{ ticks:{ color:'#9aa2ab', font:{ size:9 } }, grid:{ color:'#30363d' }, suggestedMax: globalMax, max: globalMax } } } };
+    timeHistCharts[ord] = new Chart(cv, cfg);
+  });
+  // tables (top time cards per template)
   const top = dataset.top || {};
   const nameMap = dataset.templateNames || {};
-  const rowContainer = document.createElement("div");
-  rowContainer.className = "flex-row";
-  Object.keys(top).forEach((ord) => {
-    const rows = top[ord];
-    if (!rows || !rows.length) return;
-    const div = document.createElement("div");
-    div.className = "flex-col";
-    const h = document.createElement("div");
-    h.className = "template-head";
-    h.textContent = (nameMap[ord] || "Template " + ord) + " (Top Time)";
-    div.appendChild(h);
-    const table = document.createElement("table");
-    table.className = "data-table";
-    table.innerHTML = "<thead><tr><th>Card</th><th>Time (s)</th></tr></thead>";
-    const tb = document.createElement("tbody");
-    rows.forEach((r) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${r.front}</td><td>${r.timeSec}</td>`;
-      tb.appendChild(tr);
-    });
-    table.appendChild(tb);
-    div.appendChild(table);
-    rowContainer.appendChild(div);
-  });
-  wrap.appendChild(rowContainer);
+  const rowContainer = document.createElement('div'); rowContainer.className='flex-row';
+  Object.keys(top).forEach(ord=>{ const rows = top[ord]; if(!rows || !rows.length) return; const col = document.createElement('div'); col.className='flex-col'; const h = document.createElement('div'); h.className='template-head'; h.textContent = (nameMap[ord]||('Card '+ord)) + ' (Top Time)'; col.appendChild(h); const table=document.createElement('table'); table.className='data-table'; table.innerHTML='<thead><tr><th>Card</th><th>Total Time</th></tr></thead>'; const tb=document.createElement('tbody'); rows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${r.front}</td><td>${r.timeSec}</td>`; tb.appendChild(tr); }); table.appendChild(tb); col.appendChild(table); rowContainer.appendChild(col); });
+  tablesWrap.appendChild(rowContainer);
 }
 function renderDifficult(dataset) {
   const wrap = document.getElementById("difficultTables");
