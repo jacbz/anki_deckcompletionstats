@@ -75,7 +75,48 @@ function selectModel() {
   }
 }
 
-// Exposed update from Python
+// Chart.js progress chart
+let statistics5000Chart;
+function renderProgressChart(progress) {
+  const ctx = document.getElementById('statsChart');
+  if (!ctx || typeof Chart === 'undefined') return;
+  const palette = ['#4facfe','#38f9d7','#ffb347','#ff6b6b','#a78bfa','#f472b6','#34d399'];
+  const datasets = (progress.series || []).map((s,i) => ({
+    label: s.label,
+    data: s.data,
+    borderColor: palette[i % palette.length],
+    backgroundColor: palette[i % palette.length] + '33',
+    tension: 0.25,
+    pointRadius: 2,
+    fill: false
+  }));
+  if (statistics5000Chart) {
+    statistics5000Chart.data.labels = progress.labels;
+    statistics5000Chart.data.datasets = datasets;
+    statistics5000Chart.update();
+  } else {
+    statistics5000Chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: progress.labels, datasets },
+      options: {
+        animation: false,
+        plugins: { legend: { labels: { color: '#e6edf3', font: { size: 10 } } } },
+        scales: {
+          x: { ticks: { color: '#9aa2ab', maxRotation: 60, autoSkip: true }, grid: { color: '#30363d' } },
+          y: { ticks: { color: '#9aa2ab' }, grid: { color: '#30363d' } }
+        }
+      }
+    });
+  }
+}
+
+function changeGranularity(g) {
+  if (typeof pycmd !== 'undefined') {
+    pycmd('statistics5000_set_granularity:' + g);
+  }
+}
+
+// Extend state updater
 function statistics5000UpdateState(data) {
   try {
     const s = JSON.parse(data);
@@ -83,39 +124,16 @@ function statistics5000UpdateState(data) {
     if (s.deckName) updateDeckName(s.deckName);
     if (s.modelName) updateModelName(s.modelName);
     if (Array.isArray(s.templates)) setModelTemplates(s.templates, s.selectedTemplates);
+    if (s.granularity) {
+      const sel = document.getElementById('granularitySelect');
+      if (sel && sel.value !== s.granularity) sel.value = s.granularity;
+    }
+    if (s.progress) {
+      renderProgressChart(s.progress);
+    }
   } catch (e) { console.error(e); }
 }
 
-// Chart.js dummy line chart
-let statistics5000Chart;
-function initChart() {
-  const ctx = document.getElementById('statsChart');
-  if (!ctx || typeof Chart === 'undefined') { return; }
-  if (statistics5000Chart) { return; }
-  const labels = Array.from({length: 14}, (_, i) => `Day ${i+1}`);
-  const data = labels.map(() => Math.floor(Math.random()*100));
-  statistics5000Chart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Dummy Cards Reviewed',
-        data,
-        tension: 0.35,
-        borderColor: '#4facfe',
-        backgroundColor: 'rgba(79,172,254,0.15)',
-        pointRadius: 3,
-        fill: true,
-      }]
-    },
-    options: {
-      plugins: { legend: { labels: { color: '#e6edf3' } } },
-      scales: {
-        x: { ticks: { color: '#9aa2ab' }, grid: { color: '#30363d' } },
-        y: { ticks: { color: '#9aa2ab' }, grid: { color: '#30363d' } }
-      }
-    }
-  });
-}
-
-window.addEventListener('DOMContentLoaded', initChart);
+window.addEventListener('DOMContentLoaded', () => {
+  // initial chart will render when state arrives
+});

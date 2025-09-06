@@ -14,7 +14,7 @@ from aqt.webview import AnkiWebView
 from anki.decks import DeckId
 from anki.models import NotetypeId
 
-from .data_access import deck_card_count, list_decks, list_models, model_templates, model_name
+from .data_access import deck_card_count, list_decks, list_models, model_templates, model_name, template_progress
 
 ADDON_NAME = "Statistics 5000"
 ADDON_MODULE = __name__
@@ -27,6 +27,7 @@ def get_config() -> dict:
     cfg.setdefault("selected_deck_id", None)
     cfg.setdefault("selected_model_id", None)
     cfg.setdefault("selected_model_templates", None)  # list of ords or None
+    cfg.setdefault("granularity", "days")
     return cfg
 
 
@@ -63,6 +64,16 @@ def get_selected_template_ords() -> Optional[list[int]]:
 def set_selected_template_ords(ords: Optional[list[int]]) -> None:
     cfg = get_config()
     cfg["selected_model_templates"] = ords
+    set_config(cfg)
+
+
+def get_granularity() -> str:
+    return get_config().get("granularity", "days")
+
+
+def set_granularity(g: str) -> None:
+    cfg = get_config()
+    cfg["granularity"] = g
     set_config(cfg)
 
 
@@ -117,6 +128,7 @@ def build_state_json() -> str:
         "count": current_count(),
         "deckName": selected_deck_name(),
         "modelName": model_name(get_selected_model_id()),
+        "granularity": get_granularity(),
     }
     mid = get_selected_model_id()
     if mid is not None:
@@ -128,6 +140,11 @@ def build_state_json() -> str:
         sel = get_selected_template_ords()
         if sel is not None:
             state["selectedTemplates"] = sel
+        progress = template_progress(mid, sel, get_selected_deck_id(), get_granularity())
+        state["progress"] = progress
+    else:
+        # If no specific model, we could aggregate all models later; leave empty for now
+        state["progress"] = {"labels": [], "series": []}
     return json.dumps(state)
 
 
@@ -186,6 +203,13 @@ def on_js_message(handled: Tuple[bool, Optional[str]], message: str, context):  
                 set_selected_template_ords([int(o) for o in ords])
         except Exception:
             pass
+        return (True, None)
+    if message.startswith("statistics5000_set_granularity:"):
+        g = message.split(":",1)[1]
+        set_granularity(g)
+        dlg = getattr(mw, "statistics5000_dialog", None)
+        if dlg:
+            refresh_web(dlg)
         return (True, None)
     return handled
 
