@@ -111,6 +111,29 @@ function paletteColor(i) {
   ];
   return p[i % p.length];
 }
+let currentGranularity = "days";
+function weekRangeFromLabel(label) {
+  if (!/^\d{4}-W\d{2}$/.test(label)) return label;
+  try {
+    const [yPart, wPart] = label.split("-W");
+    const year = parseInt(yPart, 10);
+    const week = parseInt(wPart, 10);
+    if (!(year > 0 && week > 0)) return label;
+    // ISO week 1: week containing Jan 4. Compute Monday of week 1 then offset.
+    const jan4 = new Date(Date.UTC(year, 0, 4));
+    const jan4Day = jan4.getUTCDay() || 7; // 1..7
+    const week1Mon = new Date(jan4);
+    week1Mon.setUTCDate(jan4.getUTCDate() - (jan4Day - 1));
+    const start = new Date(week1Mon);
+    start.setUTCDate(week1Mon.getUTCDate() + (week - 1) * 7);
+    const end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+    const fmt = (d) => d.toISOString().slice(0, 10);
+    return `${fmt(start)} - ${fmt(end)}`;
+  } catch (e) {
+    return label;
+  }
+}
 function renderStackedBarChart(targetId, dataset) {
   const ctx = document.getElementById(targetId);
   if (!ctx || typeof Chart === "undefined") return null;
@@ -131,6 +154,16 @@ function renderStackedBarChart(targetId, dataset) {
         legend: {
           display: !singleTemplate,
           labels: { color: "#e6edf3", font: { size: 10 } },
+        },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              if (!items.length) return "";
+              const l = items[0].label;
+              if (currentGranularity === "weeks") return weekRangeFromLabel(l);
+              return l;
+            },
+          },
         },
       },
       scales: {
@@ -238,6 +271,15 @@ function renderProgressChart(progress) {
         labels: { color: "#e6edf3", font: { size: 10 } },
       },
       annotation: { annotations: completionAnnotations },
+      tooltip: {
+        callbacks: {
+          title: (items) => {
+            if (!items.length) return "";
+            const l = items[0].label;
+            return currentGranularity === "weeks" ? weekRangeFromLabel(l) : l;
+          },
+        },
+      },
     },
     scales: {
       x: {
@@ -341,7 +383,7 @@ function renderTimeSpent(dataset) {
     col.className = "flex-col";
     const h = document.createElement("div");
     h.className = "template-head";
-    h.textContent = (nameMap[ord] || "Card " + ord);
+    h.textContent = nameMap[ord] || "Card " + ord;
     col.appendChild(h);
     const table = document.createElement("table");
     table.className = "data-table";
@@ -444,7 +486,7 @@ function renderDifficult(dataset) {
     col.className = "flex-col";
     const h = document.createElement("div");
     h.className = "template-head";
-    h.textContent = (nameMap[ord] || "Template " + ord);
+    h.textContent = nameMap[ord] || "Template " + ord;
     col.appendChild(h);
     const table = document.createElement("table");
     table.className = "data-table";
@@ -659,6 +701,7 @@ function renderStatusCharts(statusData) {
 function deckcompletionstatsUpdateState(data) {
   try {
     const s = JSON.parse(data);
+    if (s.granularity) currentGranularity = s.granularity;
     if (typeof s.count === "number") updateCount(s.count);
     if (s.deckName) updateDeckName(s.deckName);
     if (s.modelName) updateModelName(s.modelName);
@@ -840,6 +883,11 @@ function renderTimeStudied(ds, granularity) {
         },
         tooltip: {
           callbacks: {
+            title: (items) => {
+              if (!items.length) return "";
+              const l = items[0].label;
+              return currentGranularity === "weeks" ? weekRangeFromLabel(l) : l;
+            },
             label: (c) => {
               const h = Math.floor(c.parsed.y / 3600);
               const m = Math.floor((c.parsed.y % 3600) / 60);
