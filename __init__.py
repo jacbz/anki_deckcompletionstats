@@ -189,6 +189,8 @@ def build_state_json() -> str:
         state["difficult"] = difficult_cards(
             mid, sel, get_selected_deck_id(), word_field_index=get_word_field_index()
         )
+        from .data_access import template_status_counts
+        state["status"] = template_status_counts(mid, sel, get_selected_deck_id())
     else:
         state.update(
             {
@@ -196,6 +198,7 @@ def build_state_json() -> str:
                 "learningHistory": {"labels": [], "series": []},
                 "timeSpent": {"buckets": [], "series": [], "top": {}},
                 "difficult": {"byTemplate": {}},
+                "status": {"byTemplate": {}},
             }
         )
     return json.dumps(state)

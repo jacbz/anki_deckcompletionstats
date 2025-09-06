@@ -294,7 +294,7 @@ function renderTimeSpent(dataset) {
     div.appendChild(h);
     const table = document.createElement("table");
     table.className = "data-table";
-    table.innerHTML = "<thead><tr><th>Card</th><th>Time</th></tr></thead>";
+    table.innerHTML = "<thead><tr><th>Card</th><th>Time (s)</th></tr></thead>";
     const tb = document.createElement("tbody");
     rows.forEach((r) => {
       const tr = document.createElement("tr");
@@ -477,6 +477,30 @@ function renderMilestones(progress) {
     })
     .join("");
 }
+let statusCharts = {};
+function renderStatusCharts(statusData){
+  const wrap = document.getElementById('statusCharts');
+  const section = document.getElementById('statusSection');
+  if(!wrap || !section) return;
+  const byT = (statusData && statusData.byTemplate) || {};
+  const ords = Object.keys(byT);
+  if(!ords.length){ section.style.display='none'; wrap.innerHTML=''; return; }
+  section.style.display='block';
+  wrap.innerHTML='';
+  ords.forEach((ord, idx)=>{
+    const item = byT[ord];
+    const total = item.new + item.learning + item.review;
+    const div = document.createElement('div');
+    div.className='status-item';
+    const cv = document.createElement('canvas');
+    const lab = document.createElement('div');
+    lab.className='status-label';
+    lab.textContent = `${item.name} (${total})`;
+    div.appendChild(cv); div.appendChild(lab); wrap.appendChild(div);
+    const cfg = { type:'doughnut', data:{ labels:['New','Learning','Review'], datasets:[{ data:[item.new,item.learning,item.review], backgroundColor:['#4facfe','#ffb347','#34d399'], borderWidth:0 }] }, options:{ plugins:{ legend:{ display:false } }, cutout:'55%', responsive:true } };
+    statusCharts[ord] = new Chart(cv, cfg);
+  });
+}
 function deckcompletionstatsUpdateState(data) {
   try {
     const s = JSON.parse(data);
@@ -526,6 +550,7 @@ function deckcompletionstatsUpdateState(data) {
         wfl.style.display = "block";
       }
     }
+    if (s.status) renderStatusCharts(s.status);
   } catch (e) {
     console.error(e);
   }

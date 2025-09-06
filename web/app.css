@@ -387,6 +387,7 @@ button.refresh:active, button.select-deck:active {
   font-weight: 600;
   letter-spacing: .5px;
 }
+.card-desc { font-size:.63rem; opacity:.6; margin:-.25rem 0 .4rem; line-height:1.35; }
 .settings-card .setting-line {
   font-size: .85rem;
   margin: .25rem 0;
@@ -649,3 +650,7 @@ button.refresh:active, button.select-deck:active {
 /* Animated streak background enhancement */
 .streak-flame { overflow:hidden; }
 .streak-flame:before, .streak-flame:after { animation-duration:10s; }
+.status-charts { display:flex; flex-wrap:wrap; gap:1.2rem; margin-top:.4rem; }
+.status-charts .status-item { flex:1 1 160px; min-width:160px; max-width:220px; display:flex; flex-direction:column; align-items:center; gap:.35rem; }
+.status-charts canvas { width:140px !important; height:140px !important; }
+.status-charts .status-label { font-size:.62rem; font-weight:600; letter-spacing:.5px; text-align:center; }

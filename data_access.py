@@ -481,3 +481,50 @@ def template_progress(
         "series": series,
         "yMaxTotal": global_max_total,
     }
+
+
+def template_status_counts(model_id: Optional[int], template_ords: Optional[list[int]], deck_id: Optional[int]) -> dict:
+    """Return per-card-type counts of New / Learning / Review states per template ord.
+    Uses card.type (0=new,1=learning,2=review,3=relearning -> treat as learning).
+    """
+    if not mw.col:
+        return {"byTemplate": {}}
+    col = mw.col
+    parts: list[str] = []
+    if model_id is not None:
+        parts.append(f"mid:{model_id}")
+    if deck_id is not None:
+        deck = mw.col.decks.get(cast(DeckId, deck_id))
+        if deck:
+            dn = deck["name"].replace('"', '"')
+            parts.append(f'deck:"{dn}"')
+    query = " ".join(parts)
+    cids = mw.col.find_cards(query) if query else mw.col.find_cards("")
+    if not cids:
+        return {"byTemplate": {}}
+    cards = [mw.col.get_card(cid) for cid in cids]
+    if template_ords is not None:
+        cards = [c for c in cards if c.ord in template_ords]
+    if not cards:
+        return {"byTemplate": {}}
+    name_map: Dict[int, str] = {}
+    if model_id is not None:
+        m = get_model(model_id)
+        if m:
+            for t in m.get("tmpls", []):  # type: ignore
+                name_map[t.get("ord")] = t.get("name") or f"Card {t.get('ord',0)+1}"
+    by_t: Dict[int, Dict[str, int]] = {}
+    for c in cards:
+        st = c.type  # 0 new,1 learn,2 review,3 relearn
+        if st == 0:
+            key = "new"
+        elif st in (1, 3):
+            key = "learning"
+        else:
+            key = "review"
+        bucket = by_t.setdefault(c.ord, {"new": 0, "learning": 0, "review": 0})
+        bucket[key] += 1
+    out: Dict[int, Dict[str, Any]] = {}
+    for ord_, counts in by_t.items():
+        out[ord_] = {"name": name_map.get(ord_, f"Card {ord_+1}"), **counts}
+    return {"byTemplate": out}
