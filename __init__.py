@@ -183,12 +183,31 @@ def build_state_json() -> str:
         state["learningHistory"] = learning_history(
             mid, sel, get_selected_deck_id(), get_granularity()
         )
-        state["timeStudied"] = time_studied_history(
-            mid, sel, get_selected_deck_id(), get_granularity()
-        )
         state["timeSpent"] = time_spent_stats(
             mid, sel, get_selected_deck_id(), word_field_index=get_word_field_index()
         )
+        state["timeStudied"] = time_studied_history(
+            mid, sel, get_selected_deck_id(), get_granularity()
+        )
+        # Derived high-level metrics
+        try:
+            progress_series = state.get("progress", {}).get("series", []) or []
+            studied_sum = 0
+            total_sum = 0
+            for s in progress_series:
+                data = s.get("data") or []
+                if data:
+                    studied_sum += (data[-1] or 0)
+                total_sum += s.get("totalCards", 0) or 0
+            completion_pct = (studied_sum / total_sum * 100) if total_sum > 0 else 0.0
+            state["completionPercent"] = round(completion_pct, 1)
+            state["studiedCardsCount"] = studied_sum
+            ts = state.get("timeStudied", {}).get("totalSecondsAll", 0) or 0
+            state["totalStudiedSeconds"] = int(ts)
+        except Exception:
+            state["completionPercent"] = 0.0
+            state["studiedCardsCount"] = 0
+            state["totalStudiedSeconds"] = 0
         state["difficult"] = difficult_cards(
             mid, sel, get_selected_deck_id(), word_field_index=get_word_field_index()
         )
@@ -199,10 +218,13 @@ def build_state_json() -> str:
             {
                 "progress": {"labels": [], "series": []},
                 "learningHistory": {"labels": [], "series": []},
-                "timeStudied": {"labels": [], "series": []},
                 "timeSpent": {"binSize":15, "labels": [], "histograms": {}, "top": {}},
+                "timeStudied": {"labels": [], "series": []},
                 "difficult": {"byTemplate": {}},
                 "status": {"byTemplate": {}},
+                "completionPercent": 0.0,
+                "studiedCardsCount": 0,
+                "totalStudiedSeconds": 0,
             }
         )
     return json.dumps(state)

@@ -127,7 +127,12 @@ function renderStackedBarChart(targetId, dataset) {
     data: { labels, datasets: dataSets },
     options: {
       responsive: true,
-      plugins: { legend: { display: !singleTemplate, labels: { color: "#e6edf3", font: { size: 10 } } } },
+      plugins: {
+        legend: {
+          display: !singleTemplate,
+          labels: { color: "#e6edf3", font: { size: 10 } },
+        },
+      },
       scales: {
         x: {
           stacked: targetId === "learningHistoryChart",
@@ -138,6 +143,15 @@ function renderStackedBarChart(targetId, dataset) {
           stacked: targetId === "learningHistoryChart",
           ticks: { color: "#9aa2ab" },
           grid: { color: "#30363d" },
+          title:
+            targetId === "learningHistoryChart"
+              ? {
+                  display: true,
+                  text: "New Cards",
+                  color: "#e6edf3",
+                  font: { size: 11 },
+                }
+              : undefined,
         },
       },
     },
@@ -219,7 +233,10 @@ function renderProgressChart(progress) {
   const options = {
     animation: false,
     plugins: {
-      legend: { display: templateCount > 1, labels: { color: "#e6edf3", font: { size: 10 } } },
+      legend: {
+        display: templateCount > 1,
+        labels: { color: "#e6edf3", font: { size: 10 } },
+      },
       annotation: { annotations: completionAnnotations },
     },
     scales: {
@@ -232,6 +249,12 @@ function renderProgressChart(progress) {
         grid: { color: "#30363d" },
         suggestedMax: globalMax,
         max: globalMax,
+        title: {
+          display: true,
+          text: "Cards (Cumulative)",
+          color: "#e6edf3",
+          font: { size: 11 },
+        },
       },
     },
   };
@@ -239,34 +262,101 @@ function renderProgressChart(progress) {
   deckcompletionstatsChart = ensureChart(deckcompletionstatsChart, ctx, cfg);
 }
 let timeHistCharts = {};
-function renderTimeSpent(dataset){
-  const wrap = document.getElementById('timeSpentCharts');
-  const tablesWrap = document.getElementById('timeSpentTables');
-  if(!wrap || !tablesWrap) return;
-  wrap.innerHTML='';
-  tablesWrap.innerHTML='';
+function renderTimeSpent(dataset) {
+  const wrap = document.getElementById("timeSpentCharts");
+  const tablesWrap = document.getElementById("timeSpentTables");
+  if (!wrap || !tablesWrap) return;
+  wrap.innerHTML = "";
+  tablesWrap.innerHTML = "";
   const labels = dataset.labels || [];
   const hists = dataset.histograms || {};
   const ords = Object.keys(hists);
-  if(!ords.length){ return; }
+  if (!ords.length) {
+    return;
+  }
   // Compute global max count across all bins so y-axes align
   let globalMax = 0;
-  ords.forEach(ord=>{ const counts = (hists[ord] && hists[ord].counts) || []; counts.forEach(v=>{ if(typeof v === 'number' && v > globalMax) globalMax = v; }); });
-  if(globalMax < 1) globalMax = 1; // avoid 0 max
-  ords.forEach((ord, idx)=>{
+  ords.forEach((ord) => {
+    const counts = (hists[ord] && hists[ord].counts) || [];
+    counts.forEach((v) => {
+      if (typeof v === "number" && v > globalMax) globalMax = v;
+    });
+  });
+  if (globalMax < 1) globalMax = 1; // avoid 0 max
+  ords.forEach((ord, idx) => {
     const item = hists[ord];
-    const div = document.createElement('div'); div.className='time-item';
-    const cv = document.createElement('canvas');
-    const lab = document.createElement('div'); lab.className='time-label'; lab.textContent = item.name;
-    div.appendChild(cv); div.appendChild(lab); wrap.appendChild(div);
-    const cfg = { type:'bar', data:{ labels, datasets:[{ data:item.counts, label:item.name, backgroundColor:'#4facfe66' }] }, options:{ plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:(c)=> `${c.parsed.y} cards` } } }, scales:{ x:{ ticks:{ color:'#9aa2ab', font:{ size:9 } }, grid:{ color:'#30363d' } }, y:{ ticks:{ color:'#9aa2ab', font:{ size:9 } }, grid:{ color:'#30363d' }, suggestedMax: globalMax, max: globalMax } } } };
+    const div = document.createElement("div");
+    div.className = "time-item";
+    const cv = document.createElement("canvas");
+    const lab = document.createElement("div");
+    lab.className = "time-label";
+    lab.textContent = item.name;
+    div.appendChild(cv);
+    div.appendChild(lab);
+    wrap.appendChild(div);
+    const cfg = {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          { data: item.counts, label: item.name, backgroundColor: "#4facfe66" },
+        ],
+      },
+      options: {
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (c) => `${c.parsed.y} cards` } },
+        },
+        scales: {
+          x: {
+            ticks: { color: "#9aa2ab", font: { size: 9 } },
+            grid: { color: "#30363d" },
+          },
+          y: {
+            ticks: { color: "#9aa2ab", font: { size: 9 } },
+            grid: { color: "#30363d" },
+            suggestedMax: globalMax,
+            max: globalMax,
+            title: {
+              display: true,
+              text: "Cards",
+              color: "#e6edf3",
+              font: { size: 11 },
+            },
+          },
+        },
+      },
+    };
     timeHistCharts[ord] = new Chart(cv, cfg);
   });
   // tables (top time cards per template)
   const top = dataset.top || {};
   const nameMap = dataset.templateNames || {};
-  const rowContainer = document.createElement('div'); rowContainer.className='flex-row';
-  Object.keys(top).forEach(ord=>{ const rows = top[ord]; if(!rows || !rows.length) return; const col = document.createElement('div'); col.className='flex-col'; const h = document.createElement('div'); h.className='template-head'; h.textContent = (nameMap[ord]||('Card '+ord)) + ' (Top Time)'; col.appendChild(h); const table=document.createElement('table'); table.className='data-table'; table.innerHTML='<thead><tr><th>Card</th><th>Total Time</th></tr></thead>'; const tb=document.createElement('tbody'); rows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${r.front}</td><td>${r.timeSec}</td>`; tb.appendChild(tr); }); table.appendChild(tb); col.appendChild(table); rowContainer.appendChild(col); });
+  const rowContainer = document.createElement("div");
+  rowContainer.className = "flex-row";
+  Object.keys(top).forEach((ord) => {
+    const rows = top[ord];
+    if (!rows || !rows.length) return;
+    const col = document.createElement("div");
+    col.className = "flex-col";
+    const h = document.createElement("div");
+    h.className = "template-head";
+    h.textContent = (nameMap[ord] || "Card " + ord) + " (Top Time)";
+    col.appendChild(h);
+    const table = document.createElement("table");
+    table.className = "data-table";
+    table.innerHTML =
+      "<thead><tr><th>Card</th><th>Total Time</th></tr></thead>";
+    const tb = document.createElement("tbody");
+    rows.forEach((r) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${r.front}</td><td>${r.timeSec}</td>`;
+      tb.appendChild(tr);
+    });
+    table.appendChild(tb);
+    col.appendChild(table);
+    rowContainer.appendChild(col);
+  });
   tablesWrap.appendChild(rowContainer);
 }
 function renderDifficult(dataset) {
@@ -309,7 +399,7 @@ function isoToLocale(iso) {
   }
 }
 function renderForecastSummaries(progress) {
-  const box = document.getElementById("forecastSummaries");
+  const box = document.getElementById("forecastSummaries") || document.getElementById("summaries");
   if (!box) return;
   const lines = [];
   (progress.series || []).forEach((s) => {
@@ -319,7 +409,7 @@ function renderForecastSummaries(progress) {
     const remaining =
       (s.totalCards || 0) - (s.data ? s.data[s.data.length - 1] : 0);
     lines.push(
-      `<div class="forecast-line"><span class="tmpl">${
+      `<div class="summary-line"><span class="tmpl">${
         s.label
       }</span>: projected to finish <strong>${
         remaining <= 0 ? "(complete)" : date
@@ -428,9 +518,9 @@ function renderMilestones(progress) {
           (h) =>
             `<div class="ms-row ${
               h.projected ? "proj" : ""
-            }"><span class="ms-count">#${h.milestone.toLocaleString()} ${h.projected ? " (projection)" : ""}</span><span class="ms-date">${
-              h.label
-            }</span></div>`
+            }"><span class="ms-count">#${h.milestone.toLocaleString()} ${
+              h.projected ? " (projection)" : ""
+            }</span><span class="ms-date">${h.label}</span></div>`
         )
         .join("");
       return `<div class="ms-card"><div class="ms-title">${
@@ -440,27 +530,58 @@ function renderMilestones(progress) {
     .join("");
 }
 let statusCharts = {};
-function renderStatusCharts(statusData){
-  const wrap = document.getElementById('statusCharts');
-  const section = document.getElementById('statusSection');
-  if(!wrap || !section) return;
+function renderStatusCharts(statusData) {
+  const wrap = document.getElementById("statusCharts");
+  const section = document.getElementById("statusSection");
+  if (!wrap || !section) return;
   const byT = (statusData && statusData.byTemplate) || {};
   const ords = Object.keys(byT);
-  if(!ords.length){ section.style.display='none'; wrap.innerHTML=''; return; }
-  section.style.display='block';
-  wrap.innerHTML='';
-  ords.forEach((ord, idx)=>{
+  if (!ords.length) {
+    section.style.display = "none";
+    wrap.innerHTML = "";
+    return;
+  }
+  section.style.display = "block";
+  wrap.innerHTML = "";
+  ords.forEach((ord, idx) => {
     const item = byT[ord];
     const total = item.new + item.learning + item.review;
-    const div = document.createElement('div');
-    div.className='status-item';
-    const cv = document.createElement('canvas');
-    const lab = document.createElement('div');
-    lab.className='status-label';
+    const div = document.createElement("div");
+    div.className = "status-item";
+    const cv = document.createElement("canvas");
+    const lab = document.createElement("div");
+    lab.className = "status-label";
     lab.textContent = `${item.name} (${total})`;
-    div.appendChild(cv); div.appendChild(lab); wrap.appendChild(div);
-    const cfg = { type:'doughnut', data:{ labels:['New','Learning','Review'], datasets:[{ data:[item.new,item.learning,item.review], backgroundColor:['#4facfe','#ffb347','#34d399'], borderWidth:0 }] }, options:{ plugins:{ legend:{ display:false } }, cutout:'55%', responsive:true } };
-    statusCharts[ord] = new Chart(cv, cfg);
+    div.appendChild(cv);
+    div.appendChild(lab);
+    wrap.appendChild(div);
+    const cfg = {
+      type: "doughnut",
+      data: {
+        labels: ["New", "Learning", "Review"],
+        datasets: [
+          {
+            data: [item.new, item.learning, item.review],
+            backgroundColor: ["#4facfe", "#ffb347", "#34d399"],
+            borderWidth: 0,
+          },
+        ],
+      },
+      options: {
+        plugins: {
+          legend: {
+            position: "right",
+            display: true,
+            labels: { color: "#e6edf3", font: { size: 10 }, boxWidth: 10 },
+          },
+        },
+        cutout: "55%",
+        responsive: true,
+        maintainAspectRatio: false,
+      },
+    };
+    const chart = new Chart(cv, cfg);
+    cv.parentElement.style.position = "relative";
   });
 }
 function deckcompletionstatsUpdateState(data) {
@@ -499,7 +620,7 @@ function deckcompletionstatsUpdateState(data) {
         "learningHistoryChart",
         s.learningHistory
       );
-    if (s.timeSpent) renderTimeSpent(s.timeSpent);
+    if (s.timeSpent) renderTimeSpent(s.timeSpent); // ensure call before difficult etc.
     if (s.difficult) renderDifficult(s.difficult);
     if (s.fieldNames) {
       const wfl = document.getElementById("wordFieldLine");
@@ -514,50 +635,170 @@ function deckcompletionstatsUpdateState(data) {
     }
     if (s.status) renderStatusCharts(s.status);
     if (s.timeStudied) renderTimeStudied(s.timeStudied);
-  } catch (e) {
-    console.error(e);
+    // KPI boxes
+    const compBox = document.getElementById('completionBox');
+    const studiedBox = document.getElementById('studiedTimeBox');
+    if(compBox && typeof s.completionPercent === 'number'){
+      const cp = document.getElementById('completionPercent'); if(cp) cp.textContent = s.completionPercent.toFixed(1)+'%'; compBox.style.display='inline-flex';
+    }
+    if(studiedBox && typeof s.totalStudiedSeconds === 'number'){
+      const st = document.getElementById('studiedTimeHHMM'); if(st) st.textContent = formatStudiedHoursOnly(s.totalStudiedSeconds); studiedBox.style.display='inline-flex';
+    }
+  } catch(e){ console.error(e); }
+}
+function togglePill() {
+  const pill = document.getElementById("floatingControls");
+  if (!pill) return;
+  const content = pill.querySelector(".pill-content");
+  if (!content) {
+    pill.classList.toggle("collapsed");
+    return;
+  }
+  const isCollapsed = pill.classList.contains("collapsed");
+  if (isCollapsed) {
+    // expand
+    pill.classList.remove("collapsed");
+    content.style.display = "block";
+    const targetHeight = content.scrollHeight + "px";
+    content.style.maxHeight = "0px";
+    requestAnimationFrame(() => {
+      content.style.transition =
+        "max-height .55s cubic-bezier(.34,1.56,.64,1), opacity .4s ease";
+      content.style.maxHeight = targetHeight;
+      content.style.opacity = "1";
+    });
+    setTimeout(() => {
+      content.style.maxHeight = "";
+      content.style.transition = "";
+    }, 600);
+  } else {
+    // collapse
+    const startHeight = content.scrollHeight + "px";
+    content.style.maxHeight = startHeight;
+    content.style.opacity = "1";
+    requestAnimationFrame(() => {
+      content.style.transition = "max-height .5s ease, opacity .35s ease";
+      content.style.maxHeight = "0px";
+      content.style.opacity = "0";
+    });
+    setTimeout(() => {
+      pill.classList.add("collapsed");
+      content.style.transition = "";
+      content.style.display = "";
+    }, 520);
   }
 }
-function togglePill(){ const pill=document.getElementById('floatingControls'); if(!pill) return; const content=pill.querySelector('.pill-content'); if(!content) { pill.classList.toggle('collapsed'); return; }
-  const isCollapsed = pill.classList.contains('collapsed');
-  if(isCollapsed){ // expand
-    pill.classList.remove('collapsed');
-    content.style.display='block';
-    const targetHeight = content.scrollHeight+'px';
-    content.style.maxHeight = '0px';
-    requestAnimationFrame(()=>{ content.style.transition='max-height .55s cubic-bezier(.34,1.56,.64,1), opacity .4s ease'; content.style.maxHeight = targetHeight; content.style.opacity='1'; });
-    setTimeout(()=>{ content.style.maxHeight=''; content.style.transition=''; },600);
-  } else { // collapse
-    const startHeight = content.scrollHeight+'px';
-    content.style.maxHeight = startHeight; content.style.opacity='1';
-    requestAnimationFrame(()=>{ content.style.transition='max-height .5s ease, opacity .35s ease'; content.style.maxHeight='0px'; content.style.opacity='0'; });
-    setTimeout(()=>{ pill.classList.add('collapsed'); content.style.transition=''; content.style.display=''; },520);
+function animateStreak() {
+  const sc = document.getElementById("streakContainer");
+  if (sc) {
+    sc.classList.add("animate-gradient");
   }
 }
-function animateStreak(){ const sc=document.getElementById('streakContainer'); if(sc){ sc.classList.add('animate-gradient'); } }
-window.addEventListener('DOMContentLoaded',()=>{ animateStreak(); });
-function formatHours(n){ return (n/3600).toFixed(2); }
-function formatDays(n){ return (n/86400).toFixed(2); }
+window.addEventListener("DOMContentLoaded", () => {
+  animateStreak();
+});
+function formatHours(n) {
+  return (n / 3600).toFixed(2);
+}
+function formatDays(n) {
+  return (n / 86400).toFixed(2);
+}
+function secsToHHMM(secs) {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}h`;
+}
+function secsToHHMMTotal(secs) {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+}
+function formatStudiedXhYm(totalSeconds) {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  return `${h}h${m}m`;
+}
+function formatStudiedHoursOnly(totalSeconds){ const h=Math.round(totalSeconds/3600); return `${h}h`; }
 function renderTimeStudied(ds){
-  const section = document.getElementById('timeStudiedSection');
-  const canvas = document.getElementById('timeStudiedChart');
-  if(!section || !canvas) return;
+  const section = document.getElementById("timeStudiedSection");
+  const canvas = document.getElementById("timeStudiedChart");
+  if (!section || !canvas) return;
   const labels = ds.labels || [];
   const series = ds.series || [];
-  if(!labels.length || !series.length){ section.style.display='none'; return; }
-  section.style.display='block';
-  const ctx = canvas.getContext('2d');
+  if (!labels.length || !series.length) {
+    section.style.display = "none";
+    return;
+  }
+  section.style.display = "block";
+  const ctx = canvas.getContext("2d");
   const single = series.length <= 1;
-  const datasets = series.map((s,i)=>({ label:s.label, data:s.data, backgroundColor: paletteColor(i) + 'cc', stack:'t' }));
-  const cfg = { type:'bar', data:{ labels, datasets }, options:{ responsive:true, plugins:{ legend:{ display:!single, labels:{ color:'#e6edf3', font:{ size:10 } } }, tooltip:{ callbacks:{ label:(c)=> `${c.dataset.label}: ${c.parsed.y}s` } } }, scales:{ x:{ stacked:true, ticks:{ color:'#9aa2ab' }, grid:{ color:'#30363d' } }, y:{ stacked:true, ticks:{ color:'#9aa2ab', callback:(v)=> v + 's' }, grid:{ color:'#30363d' } } } } };
+  const datasets = series.map((s, i) => ({
+    label: s.label,
+    data: s.data,
+    backgroundColor: paletteColor(i) + "cc",
+    stack: "t",
+  }));
+  // Determine max seconds and convert to hour step size (3600 secs). We'll show integer hours only.
+  let maxSec = 0;
+  datasets.forEach((d) => {
+    d.data.forEach((v) => {
+      if (v > maxSec) maxSec = v;
+    });
+  });
+  const cfg = {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          display: !single,
+          labels: { color: "#e6edf3", font: { size: 10 } },
+        },
+        tooltip: {
+          callbacks: {
+            label: (c) => {
+              const h = Math.floor(c.parsed.y / 3600);
+              const m = Math.floor((c.parsed.y % 3600) / 60);
+              return `${c.dataset.label}: ${h}h ${m}m`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          stacked: true,
+          ticks: { color: "#9aa2ab" },
+          grid: { color: "#30363d" },
+        },
+        y: {
+          stacked: true,
+          min: 0,
+          ticks: {
+            color: "#9aa2ab",
+            stepSize: 3600,
+            callback: (v) => v / 3600 + "h",
+          },
+          grid: { color: "#30363d" },
+          title: {
+            display: true,
+            text: "Hours",
+            color: "#e6edf3",
+            font: { size: 11 },
+          },
+        },
+      },
+    },
+  };
   timeStudiedChart = ensureChart(timeStudiedChart, ctx, cfg);
-  // Summary text
   const summaryEl = document.getElementById('timeStudiedSummary');
   if(summaryEl){
+    summaryEl.classList.add('summaries');
     const totals = ds.totalsSeconds || {};
     const totalAll = ds.totalSecondsAll || 0;
-    const parts = Object.keys(totals).sort().map(name=>`You studied ${name} for ${formatHours(totals[name])} hours (${formatDays(totals[name])} days).`);
-    parts.push(`In total, you studied ${formatHours(totalAll)} hours (${formatDays(totalAll)} days).`);
-    summaryEl.innerHTML = parts.join(' ');
+    const lines = [];
+    Object.keys(totals).sort().forEach(name=>{ const sec=totals[name]; const h=Math.floor(sec/3600); const m=Math.floor((sec%3600)/60); lines.push(`<div class='summary-line'><span class='tmpl'>${name}</span>: ${h}h ${m}m total</div>`); });
+    const H=Math.floor(totalAll/3600); const M=Math.floor((totalAll%3600)/60); lines.push(`<div class='summary-line'><strong>Total:</strong> ${H}h ${M}m</div>`);
+    summaryEl.innerHTML = lines.join('');
   }
 }

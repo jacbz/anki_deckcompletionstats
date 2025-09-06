@@ -9,12 +9,24 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
 </head>
 <body>
-  <div class="layout-header">
-    <h1>Deck Completion Stats</h1>
-    <div id="streakContainer" class="streak-flame" style="display:none;">
-      <div class="flame-core"></div>
-      <div class="streak-num" id="streakDays">0</div>
-      <div class="streak-label">DAY STREAK</div>
+  <h1 class="page-heading-top">Deck Completion Stats</h1>
+  <div class="layout-header center-header">
+    <div class="header-stats-group">
+      <div id="completionBox" class="streak-flame kpi-completion" style="display:none;">
+        <div class="flame-core"></div>
+        <div class="streak-num" id="completionPercent">0%</div>
+        <div class="streak-label">COMPLETION</div>
+      </div>
+      <div id="studiedTimeBox" class="streak-flame kpi-studied" style="display:none;">
+        <div class="flame-core"></div>
+        <div class="streak-num" id="studiedTimeHHMM">00h00m</div>
+        <div class="streak-label">STUDIED</div>
+      </div>
+      <div id="streakContainer" class="streak-flame kpi-streak" style="display:none;">
+        <div class="flame-core"></div>
+        <div class="streak-num" id="streakDays">0</div>
+        <div class="streak-label">DAY STREAK</div>
+      </div>
     </div>
   </div>
 
@@ -34,7 +46,7 @@
       <div class="card-desc">Overall studied cards over time. Shows how your total grows each period and (optional) projected finish.</div>
       <canvas id="statsChart" class="chart-canvas"></canvas>
       <label class="forecast-toggle below"><input type="checkbox" id="forecastToggle" onchange="toggleForecast(this.checked)"> Show forecast</label>
-      <div id="forecastSummaries" class="forecast-summaries" style="display:none;"></div>
+      <div id="forecastSummaries" class="summaries" style="display:none;"></div>
     </div>
 
     <div class="card" id="statusSection" style="display:none;">
@@ -71,7 +83,7 @@
 
     <div class="card" id="difficultSection">
       <h2 class="card-title">Most Difficult Cards</h2>
-      <div class="card-desc">Cards with the highest wrong answer counts recently.</div>
+      <div class="card-desc">Cards with the highest wrong answer counts.</div>
       <div id="difficultTables" class="table-wrap"></div>
     </div>
   </div>
