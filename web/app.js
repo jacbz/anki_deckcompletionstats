@@ -115,6 +115,7 @@ function renderStackedBarChart(targetId, dataset) {
   if (!ctx || typeof Chart === "undefined") return null;
   const labels = dataset.labels || [];
   const series = dataset.series || [];
+  const singleTemplate = series.length <= 1;
   const dataSets = series.map((s, i) => ({
     label: s.label,
     data: s.data,
@@ -125,7 +126,7 @@ function renderStackedBarChart(targetId, dataset) {
     data: { labels, datasets: dataSets },
     options: {
       responsive: true,
-      plugins: { legend: { labels: { color: "#e6edf3", font: { size: 10 } } } },
+      plugins: { legend: { display: !singleTemplate, labels: { color: "#e6edf3", font: { size: 10 } } } },
       scales: {
         x: {
           stacked: targetId === "learningHistoryChart",
@@ -157,6 +158,7 @@ function renderProgressChart(progress) {
   const datasets = [];
   const globalMax = progress.yMaxTotal || 0;
   const completionAnnotations = [];
+  const templateCount = (progress.series || []).length;
   (progress.series || []).forEach((s, i) => {
     datasets.push({
       label: s.label,
@@ -216,7 +218,7 @@ function renderProgressChart(progress) {
   const options = {
     animation: false,
     plugins: {
-      legend: { labels: { color: "#e6edf3", font: { size: 10 } } },
+      legend: { display: templateCount > 1, labels: { color: "#e6edf3", font: { size: 10 } } },
       annotation: { annotations: completionAnnotations },
     },
     scales: {
@@ -240,6 +242,7 @@ function renderTimeSpent(dataset) {
   if (!ctx || typeof Chart === "undefined") return;
   const labels = dataset.buckets || [];
   const series = dataset.series || [];
+  const singleTemplate = series.length <= 1;
   const convSeries = series.map((s) => ({
     label: s.label,
     data: (s.data || []).map((v) =>
@@ -256,7 +259,7 @@ function renderTimeSpent(dataset) {
     data: { labels, datasets: ds },
     options: {
       plugins: {
-        legend: { labels: { color: "#e6edf3", font: { size: 10 } } },
+        legend: { display: !singleTemplate, labels: { color: "#e6edf3", font: { size: 10 } } },
         tooltip: {
           callbacks: {
             label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y} min`,
@@ -291,7 +294,7 @@ function renderTimeSpent(dataset) {
     div.appendChild(h);
     const table = document.createElement("table");
     table.className = "data-table";
-    table.innerHTML = "<thead><tr><th>Card</th><th>Time (s)</th></tr></thead>";
+    table.innerHTML = "<thead><tr><th>Card</th><th>Time</th></tr></thead>";
     const tb = document.createElement("tbody");
     rows.forEach((r) => {
       const tr = document.createElement("tr");
