@@ -225,7 +225,9 @@ h1 {
   height: 80px;
   filter: blur(12px);
   opacity: 0.9;
-  animation: corePulse 5.5s ease-in-out infinite;
+  animation: corePulse 3.5s ease-in-out infinite, 
+             flameFlicker 2.2s ease-in-out infinite alternate;
+  animation-delay: 0s, 0.8s;
 }
 
 .streak-num {
@@ -262,6 +264,7 @@ h1 {
     rgba(40, 120, 255, 0.25) 45%,
     transparent 70%
   );
+  animation-delay: 0s, 0.8s; /* Default timing */
 }
 .kpi-completion .streak-num {
   background: var(--kpi-completion-text);
@@ -279,6 +282,7 @@ h1 {
     rgba(20, 160, 110, 0.25) 45%,
     transparent 70%
   );
+  animation-delay: 1.2s, 2.0s; /* Offset by 1.2s */
 }
 .kpi-studied .streak-num {
   background: var(--kpi-studied-text);
@@ -296,6 +300,7 @@ h1 {
     rgba(255, 90, 20, 0.25) 45%,
     transparent 70%
   );
+  animation-delay: 2.4s, 3.2s; /* Offset by 2.4s */
 }
 .kpi-streak .streak-num {
   background: var(--kpi-streak-text);
@@ -849,13 +854,51 @@ h1 {
 }
 
 @keyframes corePulse {
-  0%,
-  100% {
-    transform: scale(1);
+  0% {
+    transform: scale(1) translateY(0) rotate(0deg);
     opacity: 0.9;
   }
-  50% {
-    transform: scale(1.08);
+  15% {
+    transform: scale(1.05) translateY(-2px) rotate(1deg);
+    opacity: 0.95;
+  }
+  30% {
+    transform: scale(1.12) translateY(-1px) rotate(-1deg);
     opacity: 1;
+  }
+  45% {
+    transform: scale(1.08) translateY(-3px) rotate(1.5deg);
+    opacity: 0.92;
+  }
+  60% {
+    transform: scale(1.15) translateY(-2px) rotate(-0.5deg);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(1.06) translateY(-1px) rotate(1deg);
+    opacity: 0.94;
+  }
+  90% {
+    transform: scale(1.1) translateY(-2px) rotate(-1deg);
+    opacity: 0.96;
+  }
+  100% {
+    transform: scale(1) translateY(0) rotate(0deg);
+    opacity: 0.9;
+  }
+}
+
+@keyframes flameFlicker {
+  0%, 100% {
+    filter: blur(12px) brightness(1);
+  }
+  25% {
+    filter: blur(10px) brightness(1.1);
+  }
+  50% {
+    filter: blur(14px) brightness(0.95);
+  }
+  75% {
+    filter: blur(11px) brightness(1.05);
   }
 }
