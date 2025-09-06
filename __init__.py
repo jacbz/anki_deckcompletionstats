@@ -363,7 +363,7 @@ def choose_model() -> None:
     models = list_models()
     model_pairs = [(m.get("id"), m.get("name", "(Unnamed)"), m) for m in models]
     model_pairs_sorted = sorted(model_pairs, key=lambda x: x[1].lower())
-    names = [name for _, name, _ in model_pairs_sorted]
+    names = ["(Any Model)"] + [name for _, name, _ in model_pairs_sorted]
     current_mid = get_selected_model_id()
     current_index = 0
     if current_mid is not None:
@@ -375,6 +375,9 @@ def choose_model() -> None:
         mw, ADDON_NAME, "Select model:", names, current_index, False
     )
     if not ok:
+        return
+    if sel == "(Any Model)":
+        set_selected_model_id(None)
         return
     chosen_model = None
     for mid, nm, m in model_pairs_sorted:

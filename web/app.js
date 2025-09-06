@@ -112,6 +112,8 @@ function paletteColor(i) {
   return p[i % p.length];
 }
 let currentGranularity = "days";
+// Prompt control flag for initial deck selection
+let deckPromptShown = false;
 function weekRangeFromLabel(label) {
   if (!/^\d{4}-W\d{2}$/.test(label)) return label;
   try {
@@ -702,6 +704,14 @@ function deckcompletionstatsUpdateState(data) {
   try {
     const s = JSON.parse(data);
     if (s.granularity) currentGranularity = s.granularity;
+    // If no model/templates selected yet, prompt user once to pick a deck (which will also infer model)
+    if ((!s.templates || !s.templates.length) && !deckPromptShown) {
+      deckPromptShown = true;
+      // Slight delay to ensure UI ready before dialog triggers
+      setTimeout(() => {
+        selectDeck();
+      }, 150);
+    }
     if (typeof s.count === "number") updateCount(s.count);
     if (s.deckName) updateDeckName(s.deckName);
     if (s.modelName) updateModelName(s.modelName);

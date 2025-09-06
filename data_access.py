@@ -63,13 +63,12 @@ def model_templates(model_id: int) -> list[dict[str, Any]]:
 
 
 def model_name(model_id: Optional[int]) -> str:
-    # Treat an unspecified or missing model uniformly.
     if model_id is None:
-        return "Missing Model"
+        return "(Any Model)"
     m = get_model(model_id)
     if not m:
-        return "Missing Model"
-    return m.get("name", "Missing Model")
+        return "(Missing Model)"
+    return m.get("name", "(Unnamed Model)")
 
 
 def template_progress(
