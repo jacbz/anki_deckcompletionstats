@@ -43,7 +43,7 @@
   <div class="cards-container single-column">
     <div class="card">
       <h2 class="card-title">Progress</h2>
-      <div class="card-desc">Overall studied cards over time. Shows how your total grows each period and (optional) projected finish.</div>
+      <div class="card-desc">Overall studied cards over time. Shows how your total grows each period and projected finish.</div>
       <canvas id="statsChart" class="chart-canvas"></canvas>
       <label class="forecast-toggle below"><input type="checkbox" id="forecastToggle" onchange="toggleForecast(this.checked)"> Show forecast</label>
       <div id="forecastSummaries" class="summaries" style="display:none;"></div>
@@ -51,7 +51,7 @@
 
     <div class="card" id="statusSection" style="display:none;">
       <h2 class="card-title">Status</h2>
-      <div class="card-desc">Snapshot of current card states (New / Learning / Review) for each card type.</div>
+      <div class="card-desc">Snapshot of current card states.</div>
       <div id="statusCharts" class="status-charts"></div>
     </div>
 
@@ -70,14 +70,14 @@
 
     <div class="card" id="timeStudiedSection" style="display:none;">
       <h2 class="card-title">Time Studied</h2>
-      <div class="card-desc">Total study time spent each period. Values are seconds aggregated across reviews.</div>
+      <div class="card-desc">Total study time spent each period.</div>
       <canvas id="timeStudiedChart" class="chart-canvas"></canvas>
       <div id="timeStudiedSummary" class="inline-note"></div>
     </div>
 
     <div class="card" id="timeSpentSection">
       <h2 class="card-title">Time Spent on Card</h2>
-      <div class="card-desc">Distribution of total study time per card (seconds grouped in 15s ranges) for each card type.</div>
+      <div class="card-desc">Distribution of total study time per card for each card type.</div>
       <div id="timeSpentCharts" class="time-histograms"></div>
       <div id="timeSpentTables" class="table-wrap"></div>
     </div>
@@ -85,6 +85,7 @@
     <div class="card" id="difficultSection">
       <h2 class="card-title">Most Difficult Cards</h2>
       <div class="card-desc">Cards with the highest wrong answer counts.</div>
+      <div id="difficultCharts" class="time-histograms"></div>
       <div id="difficultTables" class="table-wrap"></div>
     </div>
   </div>

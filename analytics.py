@@ -258,40 +258,42 @@ def difficult_cards(
 ) -> dict:
     cards = _filtered_cards(model_id, template_ords, deck_id)
     if not cards or not mw.col:
-        return {"byTemplate": {}, "templateNames": {}}
+        return {"byTemplate": {}, "templateNames": {}, "maxFailures": 0}
     col = mw.col
     if not getattr(col, "db", None):
-        return {"byTemplate": {}, "templateNames": {}}
+        return {"byTemplate": {}, "templateNames": {}, "maxFailures": 0}
     cids = [c.id for c in cards]
     fail_rows = col.db.all(  # type: ignore[attr-defined]
         f"SELECT cid, COUNT(*) FROM revlog WHERE ease = 1 AND cid IN ({','.join(str(i) for i in cids)}) GROUP BY cid"
     )
     fail_map = {cid: cnt for cid, cnt in fail_rows}
-    by_template: Dict[int, List[Tuple[int, int]]] = {}
     name_cache: Dict[int, str] = {}
     if model_id is not None:
         m = mw.col.models.get(NotetypeId(model_id))  # type: ignore[arg-type]
         if m:
             for t in m.get("tmpls", []):  # type: ignore
                 name_cache[t.get("ord")] = t.get("name") or f"Card {t.get('ord',0)+1}"
+    by_template: Dict[int, List[dict]] = {}
+    max_fail = 0
     for c in cards:
-        if c.id in fail_map:
-            by_template.setdefault(c.ord, []).append((c.id, fail_map[c.id]))
-    out: Dict[int, List[dict]] = {}
-    for ord_, lst in by_template.items():
-        lst_sorted = sorted(lst, key=lambda x: x[1], reverse=True)[:10]
-        rows = []
-        for cid, fails in lst_sorted:
-            card = mw.col.get_card(cid)  # type: ignore[arg-type]
-            note = card.note()
-            primary = _safe_field(note, 0) or str(cid)
-            secondary = _safe_field(note, word_field_index)
-            display = primary if secondary == "" else f"#{primary} / {secondary}"
-            if len(display) > 60:
-                display = display[:57] + "…"
-            rows.append({"cid": cid, "front": display, "failures": fails})
-        out[ord_] = rows
-    return {"byTemplate": out, "templateNames": name_cache}
+        fails = fail_map.get(c.id, 0)
+        if fails > max_fail:
+            max_fail = fails
+        note = c.note()
+        primary = _safe_field(note, 0) or str(c.id)
+        secondary = _safe_field(note, word_field_index)
+        display = primary if secondary == "" else f"#{primary} / {secondary}"
+        if len(display) > 60:
+            display = display[:57] + "…"
+        by_template.setdefault(c.ord, []).append({
+            "cid": c.id,
+            "front": display,
+            "failures": fails,
+        })
+    # Sort lists descending by failures (full list kept; JS will slice for table)
+    for ord_ in by_template.keys():
+        by_template[ord_] = sorted(by_template[ord_], key=lambda x: x["failures"], reverse=True)
+    return {"byTemplate": by_template, "templateNames": name_cache, "maxFailures": max_fail}
 
 
 # Streak --------------------------------------------------------------------

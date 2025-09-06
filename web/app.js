@@ -341,7 +341,7 @@ function renderTimeSpent(dataset) {
     col.className = "flex-col";
     const h = document.createElement("div");
     h.className = "template-head";
-    h.textContent = (nameMap[ord] || "Card " + ord) + " (Top Time)";
+    h.textContent = (nameMap[ord] || "Card " + ord);
     col.appendChild(h);
     const table = document.createElement("table");
     table.className = "data-table";
@@ -360,36 +360,106 @@ function renderTimeSpent(dataset) {
   tablesWrap.appendChild(rowContainer);
 }
 function renderDifficult(dataset) {
-  const wrap = document.getElementById("difficultTables");
-  if (!wrap) return;
-  wrap.innerHTML = "";
+  const wrapCharts = document.getElementById("difficultCharts");
+  const wrapTables = document.getElementById("difficultTables");
+  if (!wrapCharts || !wrapTables) return;
+  wrapCharts.innerHTML = "";
+  wrapTables.innerHTML = "";
   const byT = dataset.byTemplate || {};
   const nameMap = dataset.templateNames || {};
+  const ords = Object.keys(byT);
+  if (!ords.length) {
+    return;
+  }
+  // Build histogram per template of failure counts (x=failure count, y=number of cards)
+  ords.forEach((ord) => {
+    const rows = byT[ord] || [];
+    // Determine max failures in this template
+    let maxFail = 0;
+    rows.forEach((r) => {
+      if (r.failures > maxFail) maxFail = r.failures;
+    });
+    const counts = new Array(maxFail + 1).fill(0);
+    rows.forEach((r) => {
+      counts[r.failures] = (counts[r.failures] || 0) + 1;
+    });
+    // Create chart container similar to time histograms
+    const div = document.createElement("div");
+    div.className = "time-item";
+    const cv = document.createElement("canvas");
+    const lab = document.createElement("div");
+    lab.className = "time-label";
+    lab.textContent = nameMap[ord] || "Template " + ord;
+    div.appendChild(cv);
+    div.appendChild(lab);
+    wrapCharts.appendChild(div);
+    const labels = counts.map((_, i) => i.toString());
+    const cfg = {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          { data: counts, backgroundColor: "#ff6b6b66", label: "Failures" },
+        ],
+      },
+      options: {
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (c) => `${c.parsed.y} cards` } },
+        },
+        scales: {
+          x: {
+            ticks: { color: "#9aa2ab", font: { size: 9 } },
+            grid: { color: "#30363d" },
+            title: {
+              display: true,
+              text: "Failures",
+              color: "#e6edf3",
+              font: { size: 11 },
+            },
+          },
+          y: {
+            ticks: { color: "#9aa2ab", font: { size: 9 } },
+            grid: { color: "#30363d" },
+            title: {
+              display: true,
+              text: "Cards",
+              color: "#e6edf3",
+              font: { size: 11 },
+            },
+          },
+        },
+      },
+    };
+    new Chart(cv, cfg);
+  });
+  // Tables limited to top 10 per template
   const rowContainer = document.createElement("div");
   rowContainer.className = "flex-row";
-  Object.keys(byT).forEach((ord) => {
+  ords.forEach((ord) => {
     const rows = byT[ord];
     if (!rows || !rows.length) return;
-    const div = document.createElement("div");
-    div.className = "flex-col";
+    const top = rows.slice(0, 10);
+    const col = document.createElement("div");
+    col.className = "flex-col";
     const h = document.createElement("div");
     h.className = "template-head";
-    h.textContent = (nameMap[ord] || "Template " + ord) + " (Failures)";
-    div.appendChild(h);
+    h.textContent = (nameMap[ord] || "Template " + ord);
+    col.appendChild(h);
     const table = document.createElement("table");
     table.className = "data-table";
     table.innerHTML = "<thead><tr><th>Card</th><th>Failures</th></tr></thead>";
     const tb = document.createElement("tbody");
-    rows.forEach((r) => {
+    top.forEach((r) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `<td>${r.front}</td><td>${r.failures}</td>`;
       tb.appendChild(tr);
     });
     table.appendChild(tb);
-    div.appendChild(table);
-    rowContainer.appendChild(div);
+    col.appendChild(table);
+    rowContainer.appendChild(col);
   });
-  wrap.appendChild(rowContainer);
+  wrapTables.appendChild(rowContainer);
 }
 function isoToLocale(iso) {
   try {
@@ -638,7 +708,8 @@ function deckcompletionstatsUpdateState(data) {
       }
     }
     if (s.status) renderStatusCharts(s.status);
-    if (s.timeStudied) renderTimeStudied(s.timeStudied, s.granularity || 'days');
+    if (s.timeStudied)
+      renderTimeStudied(s.timeStudied, s.granularity || "days");
     // KPI boxes
     const compBox = document.getElementById("completionBox");
     const studiedBox = document.getElementById("studiedTimeBox");
@@ -732,7 +803,7 @@ function formatStudiedHoursOnly(totalSeconds) {
   const h = Math.round(totalSeconds / 3600);
   return `${h}`;
 }
-function renderTimeStudied(ds, granularity){
+function renderTimeStudied(ds, granularity) {
   const section = document.getElementById("timeStudiedSection");
   const canvas = document.getElementById("timeStudiedChart");
   if (!section || !canvas) return;
@@ -752,8 +823,56 @@ function renderTimeStudied(ds, granularity){
     stack: "t",
   }));
   let maxSec = 0;
-  datasets.forEach((d) => { d.data.forEach((v) => { if (v > maxSec) maxSec = v; }); });
-  const cfg = { type: "bar", data: { labels, datasets }, options: { responsive: true, plugins: { legend: { display: !single, labels: { color: "#e6edf3", font: { size: 10 } } }, tooltip: { callbacks: { label: (c) => { const h = Math.floor(c.parsed.y / 3600); const m = Math.floor((c.parsed.y % 3600) / 60); return `${c.dataset.label}: ${h}h ${m}m`; } } } }, scales: { x: { stacked: true, ticks: { color: "#9aa2ab" }, grid: { color: "#30363d" } }, y: { stacked: true, min: 0, ticks: { color: "#9aa2ab", stepSize: 3600, callback: (v) => v / 3600 + "h" }, grid: { color: "#30363d" }, title: { display: true, text: "Hours", color: "#e6edf3", font: { size: 11 } } } } } };
+  datasets.forEach((d) => {
+    d.data.forEach((v) => {
+      if (v > maxSec) maxSec = v;
+    });
+  });
+  const cfg = {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          display: !single,
+          labels: { color: "#e6edf3", font: { size: 10 } },
+        },
+        tooltip: {
+          callbacks: {
+            label: (c) => {
+              const h = Math.floor(c.parsed.y / 3600);
+              const m = Math.floor((c.parsed.y % 3600) / 60);
+              return `${c.dataset.label}: ${h}h ${m}m`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          stacked: true,
+          ticks: { color: "#9aa2ab" },
+          grid: { color: "#30363d" },
+        },
+        y: {
+          stacked: true,
+          min: 0,
+          ticks: {
+            color: "#9aa2ab",
+            stepSize: 3600,
+            callback: (v) => v / 3600 + "h",
+          },
+          grid: { color: "#30363d" },
+          title: {
+            display: true,
+            text: "Hours",
+            color: "#e6edf3",
+            font: { size: 11 },
+          },
+        },
+      },
+    },
+  };
   timeStudiedChart = ensureChart(timeStudiedChart, ctx, cfg);
   const summaryEl = document.getElementById("timeStudiedSummary");
   if (summaryEl) {
@@ -762,7 +881,10 @@ function renderTimeStudied(ds, granularity){
     const totalAll = ds.totalSecondsAll || 0;
     const lines = [];
     const periodCount = labels.length || 1;
-    const unit = (granularity && granularity.endsWith('s')) ? granularity.slice(0,-1) : (granularity || 'day');
+    const unit =
+      granularity && granularity.endsWith("s")
+        ? granularity.slice(0, -1)
+        : granularity || "day";
     function fmtLine(name, sec) {
       const h = Math.floor(sec / 3600);
       const m = Math.floor((sec % 3600) / 60);
@@ -770,7 +892,11 @@ function renderTimeStudied(ds, granularity){
       const avgMin = Math.round(sec / periodCount / 60) || 0;
       return `<div class='summary-line'><span class='tmpl'>${name}</span>: You studied <b>${h}h ${m}m (${days} days)</b> in total. That's ${avgMin}m per ${unit}.</div>`;
     }
-    Object.keys(totals).sort().forEach((name) => { lines.push(fmtLine(name, totals[name])); });
+    Object.keys(totals)
+      .sort()
+      .forEach((name) => {
+        lines.push(fmtLine(name, totals[name]));
+      });
     lines.push(fmtLine("Total", totalAll));
     summaryEl.innerHTML = lines.join("");
   }
