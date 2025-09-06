@@ -574,7 +574,7 @@ button.select-deck:active {
   font-size: 0.55rem;
   font-weight: 600;
   letter-spacing: 1.8px;
-  margin-top: 2px;
+  margin-top: 0.2rem;
   opacity: 0.8;
 }
 
@@ -957,8 +957,10 @@ button.select-deck:active {
     transparent 70%
   );
 }
-.kpi-completion .streak-label {
-    
+.kpi-completion .streak-num {
+  background: linear-gradient(90deg, #6fb8ff, #b0d9ff, #6fb8ff);
+  -webkit-background-clip: text;
+  background-clip: text;
 }
 .kpi-studied .flame-core {
   background: radial-gradient(
@@ -968,6 +970,11 @@ button.select-deck:active {
     transparent 70%
   );
 }
+.kpi-studied .streak-num {
+  background: linear-gradient(90deg, #4ef2c1, #a0ffe1, #4ef2c1);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
 .kpi-streak .flame-core {
   background: radial-gradient(
     circle at 50% 55%,
@@ -975,6 +982,11 @@ button.select-deck:active {
     rgba(255, 90, 20, 0.25) 45%,
     transparent 70%
   );
+}
+.kpi-streak .streak-num {
+  background: linear-gradient(90deg, #ffc178, #ff9b4d, #ffd7a6);
+  -webkit-background-clip: text;
+  background-clip: text;
 }
 /* Core animation only */
 .streak-flame .flame-core {

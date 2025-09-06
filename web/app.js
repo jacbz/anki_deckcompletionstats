@@ -399,7 +399,9 @@ function isoToLocale(iso) {
   }
 }
 function renderForecastSummaries(progress) {
-  const box = document.getElementById("forecastSummaries") || document.getElementById("summaries");
+  const box =
+    document.getElementById("forecastSummaries") ||
+    document.getElementById("summaries");
   if (!box) return;
   const lines = [];
   (progress.series || []).forEach((s) => {
@@ -620,6 +622,8 @@ function deckcompletionstatsUpdateState(data) {
         "learningHistoryChart",
         s.learningHistory
       );
+    if (s.learningHistory)
+      renderLearningHistorySummary(s.learningHistory, s.granularity || "days");
     if (s.timeSpent) renderTimeSpent(s.timeSpent); // ensure call before difficult etc.
     if (s.difficult) renderDifficult(s.difficult);
     if (s.fieldNames) {
@@ -636,15 +640,21 @@ function deckcompletionstatsUpdateState(data) {
     if (s.status) renderStatusCharts(s.status);
     if (s.timeStudied) renderTimeStudied(s.timeStudied);
     // KPI boxes
-    const compBox = document.getElementById('completionBox');
-    const studiedBox = document.getElementById('studiedTimeBox');
-    if(compBox && typeof s.completionPercent === 'number'){
-      const cp = document.getElementById('completionPercent'); if(cp) cp.textContent = s.completionPercent.toFixed(1)+'%'; compBox.style.display='inline-flex';
+    const compBox = document.getElementById("completionBox");
+    const studiedBox = document.getElementById("studiedTimeBox");
+    if (compBox && typeof s.completionPercent === "number") {
+      const cp = document.getElementById("completionPercent");
+      if (cp) cp.textContent = s.completionPercent.toFixed(1) + "%";
+      compBox.style.display = "inline-flex";
     }
-    if(studiedBox && typeof s.totalStudiedSeconds === 'number'){
-      const st = document.getElementById('studiedTimeHHMM'); if(st) st.textContent = formatStudiedHoursOnly(s.totalStudiedSeconds); studiedBox.style.display='inline-flex';
+    if (studiedBox && typeof s.totalStudiedSeconds === "number") {
+      const st = document.getElementById("studiedTimeHHMM");
+      if (st) st.textContent = formatStudiedHoursOnly(s.totalStudiedSeconds);
+      studiedBox.style.display = "inline-flex";
     }
-  } catch(e){ console.error(e); }
+  } catch (e) {
+    console.error(e);
+  }
 }
 function togglePill() {
   const pill = document.getElementById("floatingControls");
@@ -718,8 +728,11 @@ function formatStudiedXhYm(totalSeconds) {
   const m = Math.floor((totalSeconds % 3600) / 60);
   return `${h}h${m}m`;
 }
-function formatStudiedHoursOnly(totalSeconds){ const h=Math.round(totalSeconds/3600); return `${h}h`; }
-function renderTimeStudied(ds){
+function formatStudiedHoursOnly(totalSeconds) {
+  const h = Math.round(totalSeconds / 3600);
+  return `${h}`;
+}
+function renderTimeStudied(ds) {
   const section = document.getElementById("timeStudiedSection");
   const canvas = document.getElementById("timeStudiedChart");
   if (!section || !canvas) return;
@@ -791,14 +804,52 @@ function renderTimeStudied(ds){
     },
   };
   timeStudiedChart = ensureChart(timeStudiedChart, ctx, cfg);
-  const summaryEl = document.getElementById('timeStudiedSummary');
-  if(summaryEl){
-    summaryEl.classList.add('summaries');
+  const summaryEl = document.getElementById("timeStudiedSummary");
+  if (summaryEl) {
+    summaryEl.classList.add("summaries");
     const totals = ds.totalsSeconds || {};
     const totalAll = ds.totalSecondsAll || 0;
     const lines = [];
-    Object.keys(totals).sort().forEach(name=>{ const sec=totals[name]; const h=Math.floor(sec/3600); const m=Math.floor((sec%3600)/60); lines.push(`<div class='summary-line'><span class='tmpl'>${name}</span>: ${h}h ${m}m total</div>`); });
-    const H=Math.floor(totalAll/3600); const M=Math.floor((totalAll%3600)/60); lines.push(`<div class='summary-line'><strong>Total:</strong> ${H}h ${M}m</div>`);
-    summaryEl.innerHTML = lines.join('');
+    function fmtLine(name, sec) {
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const days = (sec / 86400).toFixed(2);
+      return `<div class='summary-line'><span class='tmpl'>${name}</span>: You studied <b>${h}h ${m}m (${days} days)</b> in total.</div>`;
+    }
+    Object.keys(totals)
+      .sort()
+      .forEach((name) => {
+        lines.push(fmtLine(name, totals[name]));
+      });
+    lines.push(fmtLine("Total", totalAll));
+    summaryEl.innerHTML = lines.join("");
   }
+}
+function renderLearningHistorySummary(dataset, granularity) {
+  const box = document.getElementById("learningHistorySummary");
+  if (!box) return;
+  const labels = dataset.labels || [];
+  const series = dataset.series || [];
+  if (!labels.length || !series.length) {
+    box.style.display = "none";
+    box.innerHTML = "";
+    return;
+  }
+  const unit =
+    granularity && granularity.endsWith("s")
+      ? granularity.slice(0, -1)
+      : granularity || "day";
+  const lines = series.map((s) => {
+    const total = (s.data || []).reduce((a, b) => a + (b || 0), 0);
+    const periods =
+      (s.data || []).filter((v) => typeof v === "number").length || 1;
+    const avg = total / periods;
+    return `<div class='summary-line'><span class='tmpl'>${
+      s.label
+    }</span>: You learned <b>${avg.toFixed(
+      1
+    )}</b> new cards per ${unit} on average.</div>`;
+  });
+  box.innerHTML = lines.join("");
+  box.style.display = "block";
 }

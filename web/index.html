@@ -19,8 +19,8 @@
       </div>
       <div id="studiedTimeBox" class="streak-flame kpi-studied" style="display:none;">
         <div class="flame-core"></div>
-        <div class="streak-num" id="studiedTimeHHMM">00h00m</div>
-        <div class="streak-label">STUDIED</div>
+        <div class="streak-num" id="studiedTimeHHMM">0</div>
+        <div class="streak-label">HOURS STUDIED</div>
       </div>
       <div id="streakContainer" class="streak-flame kpi-streak" style="display:none;">
         <div class="flame-core"></div>
@@ -63,13 +63,14 @@
 
     <div class="card" id="learningHistorySection">
       <h2 class="card-title">Learning History</h2>
-      <div class="card-desc">New cards first studied in each period (stacked when multiple types).</div>
+      <div class="card-desc">New cards first studied in each period.</div>
       <canvas id="learningHistoryChart" class="chart-canvas"></canvas>
+      <div id="learningHistorySummary" class="summaries" style="display:none;"></div>
     </div>
 
     <div class="card" id="timeStudiedSection" style="display:none;">
       <h2 class="card-title">Time Studied</h2>
-      <div class="card-desc">Total study time spent each period (stacked). Values are seconds aggregated across reviews.</div>
+      <div class="card-desc">Total study time spent each period. Values are seconds aggregated across reviews.</div>
       <canvas id="timeStudiedChart" class="chart-canvas"></canvas>
       <div id="timeStudiedSummary" class="inline-note"></div>
     </div>
