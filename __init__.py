@@ -81,7 +81,7 @@ def show_statistics_window() -> None:
     layout = QVBoxLayout(dialog)
     web = AnkiWebView(dialog)
     layout.addWidget(web)
-    dialog.resize(1000, 800)
+    dialog.resize(1200, 800)
 
     # Keep references to avoid garbage collection
     dialog._web = web  # type: ignore[attr-defined]

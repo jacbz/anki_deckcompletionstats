@@ -524,8 +524,8 @@ def template_progress(
     last_idx_with_value = -1
     for i in range(len(full_labels)):
         if any(
-            (s.get("data", []) + [None] * i)[i] is not None
-            or (s.get("forecast", []) + [None] * i)[i] is not None
+            len(s.get("data", [])) > i and s.get("data", [])[i] is not None
+            or len(s.get("forecast", [])) > i and s.get("forecast", [])[i] is not None
             for s in series
         ):
             last_idx_with_value = i
