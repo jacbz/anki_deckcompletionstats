@@ -842,8 +842,8 @@ const app = {
               projected: !!projected,
             });
         }
-        const thresholds = [1, 100, 500, 1000];
-        for (let v = 2000; v <= total; v += 1000) thresholds.push(v);
+        const thresholds = [1, 100, 500];
+        for (let v = 1000; v <= total; v += 500) thresholds.push(v);
         thresholds.forEach((n) => {
           if (n <= studiedDates.length) {
             addMilestone(n, studiedDates[n - 1], false);
