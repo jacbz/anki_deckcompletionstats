@@ -371,7 +371,7 @@ const app = {
       if (isCollapsed) {
         // expand
         pill.classList.remove("collapsed");
-        content.style.display = "block";
+        content.style.display = "flex";
         const targetHeight = content.scrollHeight + "px";
         content.style.maxHeight = "0px";
         requestAnimationFrame(() => {
@@ -383,6 +383,7 @@ const app = {
         setTimeout(() => {
           content.style.maxHeight = "";
           content.style.transition = "";
+          content.style.display = "";
         }, 600);
       } else {
         // collapse
