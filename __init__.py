@@ -17,15 +17,15 @@ from aqt.qt import QAction, QDialog, QInputDialog, QVBoxLayout
 from aqt.utils import qconnect, showInfo
 from aqt.webview import AnkiWebView
 
-from . import config
-from .analytics import (
+from .python import config
+from .python.analytics import (
     difficult_cards,
     learning_history,
     streak_days,
     time_spent_stats,
     time_studied_history,
 )
-from .data_access import (
+from .python.data_access import (
     all_model_templates,
     deck_card_count,
     list_decks,
@@ -35,7 +35,7 @@ from .data_access import (
     template_progress,
     template_status_counts,
 )
-from .utils import parse_flexible_date
+from .python.utils import parse_flexible_date
 
 ADDON_NAME = "Deck Completion Stats"
 ADDON_MODULE = __name__.split(".")[0]
