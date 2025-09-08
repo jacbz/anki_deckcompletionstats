@@ -6,6 +6,7 @@ All direct interaction with Anki collection objects that provides data to the UI
 should reside here.
 """
 import datetime as _dt
+import re
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from anki.cards import Card, CardId
@@ -14,6 +15,7 @@ from anki.models import NotetypeId
 from aqt import mw
 
 from . import config
+from .utils import TimeBucketer, parse_flexible_date
 
 
 def deck_card_count(deck_id: Optional[int]) -> int:
@@ -185,68 +187,11 @@ def _get_template_names(model_id: Optional[int]) -> dict[int, str]:
     }
 
 
-class _TimeBucketer:
-    """Handles time-based bucketing of data."""
 
-    def __init__(self, granularity: str):
-        self.granularity = granularity
-
-    def label_from_date(self, dt: _dt.date) -> str:
-        """Generate a label for a given date based on granularity."""
-        if self.granularity == "days":
-            return dt.strftime("%Y-%m-%d")
-        if self.granularity == "weeks":
-            year, week, _ = dt.isocalendar()
-            return f"{year}-W{week:02d}"
-        if self.granularity == "months":
-            return f"{dt.year}-{dt.month:02d}"
-        if self.granularity == "quarters":
-            q = (dt.month - 1) // 3 + 1
-            return f"{dt.year}-Q{q}"
-        if self.granularity == "years":
-            return str(dt.year)
-        return dt.strftime("%Y-%m-%d")
-
-    def bucket_start(self, dt: _dt.datetime) -> _dt.date:
-        """Find the start date of the bucket for a given datetime."""
-        if self.granularity == "days":
-            return dt.date()
-        if self.granularity == "weeks":
-            iso = dt.isocalendar()
-            return _dt.date.fromisocalendar(iso[0], iso[1], 1)
-        if self.granularity == "months":
-            return _dt.date(dt.year, dt.month, 1)
-        if self.granularity == "quarters":
-            start_month = ((dt.month - 1) // 3) * 3 + 1
-            return _dt.date(dt.year, start_month, 1)
-        if self.granularity == "years":
-            return _dt.date(dt.year, 1, 1)
-        return dt.date()
-
-    def next_bucket(self, d: _dt.date) -> _dt.date:
-        """Get the start date of the next bucket."""
-        if self.granularity == "days":
-            return d + _dt.timedelta(days=1)
-        if self.granularity == "weeks":
-            return d + _dt.timedelta(weeks=1)
-        if self.granularity == "months":
-            year = d.year + (1 if d.month == 12 else 0)
-            month = 1 if d.month == 12 else d.month + 1
-            return _dt.date(year, month, 1)
-        if self.granularity == "quarters":
-            month = d.month + 3
-            year = d.year
-            if month > 12:
-                month -= 12
-                year += 1
-            return _dt.date(year, month, 1)
-        if self.granularity == "years":
-            return _dt.date(d.year + 1, 1, 1)
-        return d + _dt.timedelta(days=1)
 
 
 def _calculate_historic_progress(
-    cards: list[Card], first_map: dict[int, int], bucketer: _TimeBucketer, model_id: Optional[int] = None
+    cards: list[Card], first_map: dict[int, int], bucketer: TimeBucketer, model_id: Optional[int] = None
 ) -> tuple[dict, dict, list, list, dict]:
     """Aggregate historical card study counts into time buckets."""
     per_template_counts: Dict[int, Dict[str, int]] = {}
@@ -257,8 +202,19 @@ def _calculate_historic_progress(
     # Get date filter settings
     start_date_str = config.get_date_filter_start()
     end_date_str = config.get_date_filter_end()
-    start_date = _dt.datetime.strptime(start_date_str, "%Y-%m-%d").date() if start_date_str else None
-    end_date = _dt.datetime.strptime(end_date_str, "%Y-%m-%d").date() if end_date_str else None
+    
+    # Parse dates with flexible parsing
+    start_date = None
+    if start_date_str:
+        parsed_start = parse_flexible_date(start_date_str, default_to_start=True)
+        if parsed_start:
+            start_date = _dt.datetime.strptime(parsed_start, "%Y-%m-%d").date()
+    
+    end_date = None
+    if end_date_str:
+        parsed_end = parse_flexible_date(end_date_str, default_to_start=False)
+        if parsed_end:
+            end_date = _dt.datetime.strptime(parsed_end, "%Y-%m-%d").date()
 
     # First pass: count ALL cards (regardless of review status or date filter)
     for c in cards:
@@ -326,7 +282,7 @@ def _calculate_forecast(
     historic_labels: list[str],
     per_template_counts: dict,
     template_review_dates: dict,
-    bucketer: _TimeBucketer,
+    bucketer: TimeBucketer,
 ) -> tuple[list[Optional[int]], int, str, str]:
     """Calculate forecast data for a single template using only last 30 days of activity.
     
@@ -443,7 +399,7 @@ def template_progress(
 
     cids = [c.id for c in cards]
     first_map = _get_first_review_timestamps(cids)
-    bucketer = _TimeBucketer(granularity)
+    bucketer = TimeBucketer(granularity)
 
     (
         per_template_counts,
@@ -457,17 +413,39 @@ def template_progress(
         return {"labels": [], "series": []}
 
     # Collect review dates for rate calculation and milestones
+    # This should be UNFILTERED data for forecast calculation AND milestones
     template_review_dates: Dict[int, List[_dt.date]] = {}
+    
+    # Get date filter settings for filtering milestone dates
+    start_date_str = config.get_date_filter_start()
+    end_date_str = config.get_date_filter_end()
+    
+    # Parse dates with flexible parsing
+    start_date = None
+    if start_date_str:
+        parsed_start = parse_flexible_date(start_date_str, default_to_start=True)
+        if parsed_start:
+            start_date = _dt.datetime.strptime(parsed_start, "%Y-%m-%d").date()
+    
+    end_date = None
+    if end_date_str:
+        parsed_end = parse_flexible_date(end_date_str, default_to_start=False)
+        if parsed_end:
+            end_date = _dt.datetime.strptime(parsed_end, "%Y-%m-%d").date()
+    
     for c in cards:
         rid = first_map.get(c.id)
         if rid:
             dt_date = _dt.datetime.fromtimestamp(rid / 1000).date()
             template_key = _get_template_key(c, model_id)
+            
+            # Always collect unfiltered review dates for forecast calculation
             template_review_dates.setdefault(template_key, []).append(dt_date)
 
+    # For milestones, use UNFILTERED data (same as forecasts)
     studied_dates_iso_map: Dict[int, List[str]] = {
         ord_: sorted([d.isoformat() for d in dlist])
-        for ord_, dlist in template_review_dates.items()
+        for ord_, dlist in template_review_dates.items()  # Use UNFILTERED dates for milestones
     }
 
     series: List[Dict[str, Any]] = []
@@ -479,17 +457,69 @@ def template_progress(
     # that may have different start dates and completion forecasts.
 
     # First, calculate all forecasts to find the max future date needed
+    # IMPORTANT: Use unfiltered data for forecast calculation
     forecast_results = {}
+    
+    # Create unfiltered data structures (needed for both forecast and completion ISO calculation)
+    unfiltered_per_template_counts: Dict[int, Dict[str, int]] = {}
+    unfiltered_bucketer = TimeBucketer(granularity)
+    
+    for c in cards:
+        template_key = _get_template_key(c, model_id)
+        rid = first_map.get(c.id)
+        if not rid:
+            continue
+            
+        dt = _dt.datetime.fromtimestamp(rid / 1000)
+        bdate = unfiltered_bucketer.bucket_start(dt)
+        label = unfiltered_bucketer.label_from_date(bdate)
+        tdict = unfiltered_per_template_counts.setdefault(template_key, {})
+        tdict[label] = tdict.get(label, 0) + 1
+    
+    # Create unfiltered historic labels for forecast calculation
+    all_bucket_dates = set()
+    for template_data in unfiltered_per_template_counts.values():
+        for label in template_data.keys():
+            # Convert label back to date
+            if granularity == "days":
+                date_obj = _dt.datetime.strptime(label, "%Y-%m-%d").date()
+            elif granularity == "weeks":
+                year, week = label.split("-W")
+                date_obj = _dt.date.fromisocalendar(int(year), int(week), 1)
+            elif granularity == "months":
+                year_str, month_str = label.split("-")
+                date_obj = _dt.date(int(year_str), int(month_str), 1)
+            elif granularity == "quarters":
+                year_str, quarter_str = label.split("-Q")
+                quarter_month = (int(quarter_str) - 1) * 3 + 1
+                date_obj = _dt.date(int(year_str), quarter_month, 1)
+            elif granularity == "years":
+                date_obj = _dt.date(int(label), 1, 1)
+            else:
+                date_obj = _dt.datetime.strptime(label, "%Y-%m-%d").date()
+            all_bucket_dates.add(date_obj)
+    
+    unfiltered_historic_dates = sorted(all_bucket_dates) if all_bucket_dates else []
+    if unfiltered_historic_dates:
+        today_bucket = unfiltered_bucketer.bucket_start(_dt.datetime.now())
+        if unfiltered_historic_dates[-1] < today_bucket:
+            cur_ext = unfiltered_historic_dates[-1]
+            while cur_ext < today_bucket:
+                cur_ext = unfiltered_bucketer.next_bucket(cur_ext)
+                unfiltered_historic_dates.append(cur_ext)
+    
+    unfiltered_historic_labels = [unfiltered_bucketer.label_from_date(d) for d in unfiltered_historic_dates]
+    
     if forecast:
         max_future_buckets = 0
         for ord_ in template_total_cards:
             fc_series, comp_idx, comp_date, comp_iso = _calculate_forecast(
                 ord_,
                 template_total_cards[ord_],
-                historic_labels,
-                per_template_counts,
-                template_review_dates,
-                bucketer,
+                unfiltered_historic_labels,  # Use unfiltered labels
+                unfiltered_per_template_counts,  # Use unfiltered counts
+                template_review_dates,  # Use unfiltered review dates
+                unfiltered_bucketer,
             )
             if fc_series:
                 forecast_results[ord_] = (fc_series, comp_idx, comp_date, comp_iso)
@@ -541,10 +571,10 @@ def template_progress(
              _, _, _, comp_iso = _calculate_forecast(
                 ord_,
                 total_cards,
-                historic_labels,
-                per_template_counts,
-                template_review_dates,
-                bucketer,
+                unfiltered_historic_labels,  # Use unfiltered labels
+                unfiltered_per_template_counts,  # Use unfiltered counts
+                template_review_dates,  # Use unfiltered review dates
+                unfiltered_bucketer,
             )
              entry["forecastCompletionISO"] = comp_iso
 

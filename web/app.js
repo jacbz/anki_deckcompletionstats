@@ -125,19 +125,7 @@ const app = {
           const startValue = startDateInput ? startDateInput.value || null : null;
           const endValue = endDateInput ? endDateInput.value || null : null;
           
-          // Parse flexible dates
-          const parsedStartValue = startValue ? this.utils.parseFlexibleDate(startValue, true) : null;
-          const parsedEndValue = endValue ? this.utils.parseFlexibleDate(endValue, false) : null;
-          
-          // Update the input fields with parsed values
-          if (startDateInput && parsedStartValue && parsedStartValue !== startValue) {
-            startDateInput.value = parsedStartValue;
-          }
-          if (endDateInput && parsedEndValue && parsedEndValue !== endValue) {
-            endDateInput.value = parsedEndValue;
-          }
-          
-          this.anki.setDateFilters(parsedStartValue, parsedEndValue);
+          this.anki.setDateFilters(startValue, endValue);
         });
       }
 
@@ -149,6 +137,8 @@ const app = {
           if (startDateInput) {
             startDateInput.value = "";
           }
+          // Trigger Apply button functionality
+          applyDateFilter && applyDateFilter.click();
         });
       }
 
@@ -159,6 +149,8 @@ const app = {
           if (endDateInput) {
             endDateInput.value = "";
           }
+          // Trigger Apply button functionality
+          applyDateFilter && applyDateFilter.click();
         });
       }
 
@@ -371,7 +363,7 @@ const app = {
       if (isCollapsed) {
         // expand
         pill.classList.remove("collapsed");
-        content.style.display = "flex";
+        content.style.display = "block";
         const targetHeight = content.scrollHeight + "px";
         content.style.maxHeight = "0px";
         requestAnimationFrame(() => {
@@ -383,7 +375,6 @@ const app = {
         setTimeout(() => {
           content.style.maxHeight = "";
           content.style.transition = "";
-          content.style.display = "";
         }, 600);
       } else {
         // collapse
@@ -719,25 +710,6 @@ const app = {
               },
             },
           },
-          plugins: [{
-            afterDatasetsDraw: function(chart, args, options) {
-              const ctx = chart.ctx;
-              const meta = chart.getDatasetMeta(0);
-              meta.data.forEach((bar, index) => {
-                const value = chart.data.datasets[0].data[index];
-                if (value > 0) {
-                  ctx.save();
-                  ctx.fillStyle = '#e6edf3';
-                  ctx.font = '8px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-                  ctx.textAlign = 'center';
-                  const x = bar.x;
-                  const y = bar.y - 5;
-                  ctx.fillText(value, x, y);
-                  ctx.restore();
-                }
-              });
-            }
-          }],
         };
         app.charts.timeHist[ord] = new Chart(cv, cfg);
       });
@@ -852,25 +824,6 @@ const app = {
               },
             },
           },
-          plugins: [{
-            afterDatasetsDraw: function(chart, args, options) {
-              const ctx = chart.ctx;
-              const meta = chart.getDatasetMeta(0);
-              meta.data.forEach((bar, index) => {
-                const value = chart.data.datasets[0].data[index];
-                if (value > 0) {
-                  ctx.save();
-                  ctx.fillStyle = '#e6edf3';
-                  ctx.font = '8px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-                  ctx.textAlign = 'center';
-                  const x = bar.x;
-                  const y = bar.y - 5;
-                  ctx.fillText(value, x, y);
-                  ctx.restore();
-                }
-              });
-            }
-          }],
         };
         new Chart(cv, cfg);
       });
@@ -1263,62 +1216,6 @@ const app = {
    * Utility functions.
    */
   utils: {
-    /**
-     * Parse flexible date input and return ISO format date.
-     * @param {string} dateStr - Input date string
-     * @param {boolean} defaultToStart - Whether to default to start (true) or end (false) of period
-     * @returns {string|null} ISO format date or null
-     */
-    parseFlexibleDate(dateStr, defaultToStart = true) {
-      if (!dateStr) return null;
-      
-      dateStr = dateStr.trim();
-      
-      // If already in ISO format, return as-is
-      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-        return dateStr;
-      }
-      
-      // Handle different formats
-      if (/^\d{4}$/.test(dateStr)) {  // Just year: "2024"
-        const year = dateStr;
-        if (defaultToStart) {
-          return `${year}-01-01`;
-        } else {
-          return `${year}-12-31`;
-        }
-      } else if (/^\d{1,2}\.\d{4}$/.test(dateStr)) {  // Month.Year: "01.2024"
-        const parts = dateStr.split('.');
-        const month = parts[0].padStart(2, '0');
-        const year = parts[1];
-        if (defaultToStart) {
-          return `${year}-${month}-01`;
-        } else {
-          // Get last day of month
-          const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
-          return `${year}-${month}-${lastDay.toString().padStart(2, '0')}`;
-        }
-      } else if (/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(dateStr)) {  // DD.MM.YYYY: "01.01.2024"
-        const parts = dateStr.split('.');
-        const day = parts[0].padStart(2, '0');
-        const month = parts[1].padStart(2, '0');
-        const year = parts[2];
-        return `${year}-${month}-${day}`;
-      }
-      
-      // If no pattern matches, try to parse as-is
-      try {
-        const date = new Date(dateStr);
-        if (!isNaN(date.getTime())) {
-          return date.toISOString().split('T')[0];
-        }
-      } catch (e) {
-        // Ignore parsing errors
-      }
-      
-      return null;
-    },
-
     /**
      * @param {string} iso
      * @returns {string}

@@ -7,6 +7,7 @@ Adds a Tools menu item to open a window with deck completion statistics.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Optional, Tuple, cast
 
@@ -34,6 +35,7 @@ from .data_access import (
     template_progress,
     template_status_counts,
 )
+from .utils import parse_flexible_date
 
 ADDON_NAME = "Deck Completion Stats"
 ADDON_MODULE = __name__.split(".")[0]
@@ -317,6 +319,13 @@ def on_js_message(
             if isinstance(date_filters, dict):
                 start_date = date_filters.get("start") or None
                 end_date = date_filters.get("end") or None
+                
+                # Handle flexible date parsing
+                if start_date:
+                    start_date = parse_flexible_date(start_date, default_to_start=True)
+                if end_date:
+                    end_date = parse_flexible_date(end_date, default_to_start=False)
+                
                 config.set_date_filter_start(start_date)
                 config.set_date_filter_end(end_date)
         except (json.JSONDecodeError, TypeError):

@@ -16,11 +16,40 @@ from anki.notes import Note
 from aqt import mw
 
 from . import config
+from .utils import TimeBucketer, parse_flexible_date, safe_field
 from .data_access import _get_template_key, _get_template_name_for_key
 
 # Constants for time spent histogram
 HIST_BIN_SIZE = 15
 HIST_MAX_CAP = 450
+
+
+def _get_date_filter_timestamps() -> tuple[Optional[int], Optional[int]]:
+    """Get start and end timestamps for date filtering, returns None if no filter."""
+    start_date_str = config.get_date_filter_start()
+    end_date_str = config.get_date_filter_end()
+    
+    start_timestamp = None
+    end_timestamp = None
+    
+    if start_date_str:
+        try:
+            parsed_start = parse_flexible_date(start_date_str, default_to_start=True)
+            if parsed_start:
+                start_timestamp = int(_dt.datetime.strptime(parsed_start, "%Y-%m-%d").timestamp() * 1000)
+        except ValueError:
+            pass
+    
+    if end_date_str:
+        try:
+            parsed_end = parse_flexible_date(end_date_str, default_to_start=False)
+            if parsed_end:
+                # End of day timestamp (23:59:59)
+                end_timestamp = int((_dt.datetime.strptime(parsed_end, "%Y-%m-%d") + _dt.timedelta(days=1) - _dt.timedelta(seconds=1)).timestamp() * 1000)
+        except ValueError:
+            pass
+    
+    return start_timestamp, end_timestamp
 
 
 def _is_within_date_filter(review_timestamp: int) -> bool:
@@ -34,103 +63,25 @@ def _is_within_date_filter(review_timestamp: int) -> bool:
     review_date = _dt.datetime.fromtimestamp(review_timestamp / 1000).date()
     
     if start_date_str:
-        start_date = _dt.datetime.strptime(start_date_str, "%Y-%m-%d").date()
-        if review_date < start_date:
-            return False
+        # Parse date with flexible parsing
+        parsed_start = parse_flexible_date(start_date_str, default_to_start=True)
+        if parsed_start:
+            start_date = _dt.datetime.strptime(parsed_start, "%Y-%m-%d").date()
+            if review_date < start_date:
+                return False
     
     if end_date_str:
-        end_date = _dt.datetime.strptime(end_date_str, "%Y-%m-%d").date()
-        if review_date > end_date:
-            return False
+        # Parse date with flexible parsing
+        parsed_end = parse_flexible_date(end_date_str, default_to_start=False)
+        if parsed_end:
+            end_date = _dt.datetime.strptime(parsed_end, "%Y-%m-%d").date()
+            if review_date > end_date:
+                return False
     
     return True
 
 
-def _label_from_date(d: _dt.date, granularity: str) -> str:
-    """
-    Generates a string label for a date based on granularity.
 
-    Args:
-        d: The date to label.
-        granularity: The time granularity.
-
-    Returns:
-        A formatted string label for the date.
-    """
-    if granularity == "days":
-        return d.strftime("%Y-%m-%d")
-    if granularity == "weeks":
-        year, week, _ = d.isocalendar()
-        return f"{year}-W{week:02d}"
-    if granularity == "months":
-        return f"{d.year}-{d.month:02d}"
-    if granularity == "quarters":
-        quarter = (d.month - 1) // 3 + 1
-        return f"{d.year}-Q{quarter}"
-    if granularity == "years":
-        return str(d.year)
-    return d.strftime("%Y-%m-%d")
-
-
-# region Shared Helpers
-# These are utility functions used by the main analytics functions.
-
-
-def _bucket_start(dt: _dt.datetime, granularity: str) -> _dt.date:
-    """
-    Calculates the start date of a time bucket for a given datetime and granularity.
-
-    Args:
-        dt: The datetime to bucket.
-        granularity: The time granularity ('days', 'weeks', 'months', 'quarters', 'years').
-
-    Returns:
-        The start date of the bucket.
-    """
-    if granularity == "days":
-        return dt.date()
-    if granularity == "weeks":
-        iso = dt.isocalendar()
-        return _dt.date.fromisocalendar(iso[0], iso[1], 1)
-    if granularity == "months":
-        return _dt.date(dt.year, dt.month, 1)
-    if granularity == "quarters":
-        start_month = ((dt.month - 1) // 3) * 3 + 1
-        return _dt.date(dt.year, start_month, 1)
-    if granularity == "years":
-        return _dt.date(dt.year, 1, 1)
-    return dt.date()
-
-
-def _next_bucket(d: _dt.date, granularity: str) -> _dt.date:
-    """
-    Calculates the start date of the next time bucket.
-
-    Args:
-        d: The current bucket's start date.
-        granularity: The time granularity.
-
-    Returns:
-        The start date of the next bucket.
-    """
-    if granularity == "days":
-        return d + _dt.timedelta(days=1)
-    if granularity == "weeks":
-        return d + _dt.timedelta(weeks=1)
-    if granularity == "months":
-        year = d.year + (1 if d.month == 12 else 0)
-        month = 1 if d.month == 12 else d.month + 1
-        return _dt.date(year, month, 1)
-    if granularity == "quarters":
-        month = d.month + 3
-        year = d.year
-        if month > 12:
-            month -= 12
-            year += 1
-        return _dt.date(year, month, 1)
-    if granularity == "years":
-        return _dt.date(d.year + 1, 1, 1)
-    return d + _dt.timedelta(days=1)
 
 
 def _get_template_name_map(model_id: Optional[int]) -> Dict[int, str]:
@@ -157,23 +108,7 @@ def _get_template_name_map(model_id: Optional[int]) -> Dict[int, str]:
     return name_map
 
 
-def _safe_field(note: Note, idx: int) -> str:
-    """
-    Safely retrieves a field from a note by index.
 
-    Args:
-        note: The note object.
-        idx: The index of the field to retrieve.
-
-    Returns:
-        The field content as a string, or an empty string if retrieval fails.
-    """
-    try:
-        if 0 <= idx < len(note.fields):
-            return note.fields[idx]
-    except Exception:
-        pass
-    return ""
 
 
 # endregion
@@ -249,6 +184,8 @@ def learning_history(
     if not cards or not mw.col or not mw.col.db:
         return {"labels": [], "series": []}
 
+    bucketer = TimeBucketer(granularity)
+
     card_ids = [c.id for c in cards]
     revlog_rows = mw.col.db.all(
         f"SELECT cid, MIN(id) FROM revlog WHERE cid IN ({','.join(str(i) for i in card_ids)}) GROUP BY cid"
@@ -268,9 +205,9 @@ def learning_history(
             continue
 
         dt = _dt.datetime.fromtimestamp(review_id / 1000)
-        bucket_date = _bucket_start(dt, granularity)
+        bucket_date = bucketer.bucket_start(dt)
         bucket_dates.add(bucket_date)
-        label = _label_from_date(bucket_date, granularity)
+        label = bucketer.label_from_date(bucket_date)
 
         template_key = _get_template_key(card, model_id)
         template_buckets = cards_per_template_bucket.setdefault(template_key, {})
@@ -284,14 +221,14 @@ def learning_history(
     end_date_str = config.get_date_filter_end()
     
     if not end_date_str:
-        today_bucket = _bucket_start(_dt.datetime.now(), granularity)
+        today_bucket = bucketer.bucket_start(_dt.datetime.now())
         if dates_sorted and dates_sorted[-1] < today_bucket:
             current_date = dates_sorted[-1]
             while current_date < today_bucket:
-                current_date = _next_bucket(current_date, granularity)
+                current_date = bucketer.next_bucket(current_date)
                 dates_sorted.append(current_date)
 
-    labels = [_label_from_date(d, granularity) for d in dates_sorted]
+    labels = [bucketer.label_from_date(d) for d in dates_sorted]
     series = []
 
     for template_key in sorted(cards_per_template_bucket.keys()):
@@ -340,25 +277,15 @@ def time_spent_stats(
     card_ids = [c.id for c in cards]
     
     # Apply date filtering to revlog entries
-    start_date_str = config.get_date_filter_start()
-    end_date_str = config.get_date_filter_end()
+    start_timestamp, end_timestamp = _get_date_filter_timestamps()
     
     date_filter_sql = ""
-    if start_date_str or end_date_str:
+    if start_timestamp or end_timestamp:
         conditions = []
-        if start_date_str:
-            try:
-                start_timestamp = int(_dt.datetime.strptime(start_date_str, "%Y-%m-%d").timestamp() * 1000)
-                conditions.append(f"id >= {start_timestamp}")
-            except ValueError:
-                pass
-        if end_date_str:
-            try:
-                # End of day timestamp (23:59:59)
-                end_timestamp = int((_dt.datetime.strptime(end_date_str, "%Y-%m-%d") + _dt.timedelta(days=1) - _dt.timedelta(seconds=1)).timestamp() * 1000)
-                conditions.append(f"id <= {end_timestamp}")
-            except ValueError:
-                pass
+        if start_timestamp:
+            conditions.append(f"id >= {start_timestamp}")
+        if end_timestamp:
+            conditions.append(f"id <= {end_timestamp}")
         if conditions:
             date_filter_sql = " AND " + " AND ".join(conditions)
     
@@ -417,8 +344,8 @@ def time_spent_stats(
             if not card:
                 continue
             note = card.note()
-            primary = _safe_field(note, 0) or str(cid)
-            secondary = _safe_field(note, 1)
+            primary = safe_field(note, 0) or str(cid)
+            secondary = safe_field(note, 1)
             display = primary if not secondary else f"{primary} / {secondary}"
             if len(display) > 60:
                 display = display[:57] + "…"
@@ -472,25 +399,15 @@ def difficult_cards(
     card_ids = [c.id for c in cards]
     
     # Apply date filtering to revlog entries
-    start_date_str = config.get_date_filter_start()
-    end_date_str = config.get_date_filter_end()
+    start_timestamp, end_timestamp = _get_date_filter_timestamps()
     
     date_filter_sql = ""
-    if start_date_str or end_date_str:
+    if start_timestamp or end_timestamp:
         conditions = []
-        if start_date_str:
-            try:
-                start_timestamp = int(_dt.datetime.strptime(start_date_str, "%Y-%m-%d").timestamp() * 1000)
-                conditions.append(f"id >= {start_timestamp}")
-            except ValueError:
-                pass
-        if end_date_str:
-            try:
-                # End of day timestamp (23:59:59)
-                end_timestamp = int((_dt.datetime.strptime(end_date_str, "%Y-%m-%d") + _dt.timedelta(days=1) - _dt.timedelta(seconds=1)).timestamp() * 1000)
-                conditions.append(f"id <= {end_timestamp}")
-            except ValueError:
-                pass
+        if start_timestamp:
+            conditions.append(f"id >= {start_timestamp}")
+        if end_timestamp:
+            conditions.append(f"id <= {end_timestamp}")
         if conditions:
             date_filter_sql = " AND " + " AND ".join(conditions)
     
@@ -507,8 +424,8 @@ def difficult_cards(
             max_failures = failures
 
         note = card.note()
-        primary = _safe_field(note, 0) or str(card.id)
-        secondary = _safe_field(note, 1)
+        primary = safe_field(note, 0) or str(card.id)
+        secondary = safe_field(note, 1)
         display = primary if not secondary else f"{primary} / {secondary}"
         if len(display) > 60:
             display = display[:57] + "…"
@@ -589,25 +506,15 @@ def streak_days(deck_id: Optional[int]) -> int:
             safe_card_ids = [str(int(cid)) for cid in card_ids]
             
             # Apply date filtering to revlog entries
-            start_date_str = config.get_date_filter_start()
-            end_date_str = config.get_date_filter_end()
+            start_timestamp, end_timestamp = _get_date_filter_timestamps()
             
             date_filter_sql = ""
-            if start_date_str or end_date_str:
+            if start_timestamp or end_timestamp:
                 conditions = []
-                if start_date_str:
-                    try:
-                        start_timestamp = int(_dt.datetime.strptime(start_date_str, "%Y-%m-%d").timestamp() * 1000)
-                        conditions.append(f"id >= {start_timestamp}")
-                    except ValueError:
-                        pass
-                if end_date_str:
-                    try:
-                        # End of day timestamp (23:59:59)
-                        end_timestamp = int((_dt.datetime.strptime(end_date_str, "%Y-%m-%d") + _dt.timedelta(days=1) - _dt.timedelta(seconds=1)).timestamp() * 1000)
-                        conditions.append(f"id <= {end_timestamp}")
-                    except ValueError:
-                        pass
+                if start_timestamp:
+                    conditions.append(f"id >= {start_timestamp}")
+                if end_timestamp:
+                    conditions.append(f"id <= {end_timestamp}")
                 if conditions:
                     date_filter_sql = " AND " + " AND ".join(conditions)
             
@@ -683,25 +590,15 @@ def time_studied_history(
     card_ids = [c.id for c in cards]
     
     # Apply date filtering to revlog entries
-    start_date_str = config.get_date_filter_start()
-    end_date_str = config.get_date_filter_end()
+    start_timestamp, end_timestamp = _get_date_filter_timestamps()
     
     date_filter_sql = ""
-    if start_date_str or end_date_str:
+    if start_timestamp or end_timestamp:
         conditions = []
-        if start_date_str:
-            try:
-                start_timestamp = int(_dt.datetime.strptime(start_date_str, "%Y-%m-%d").timestamp() * 1000)
-                conditions.append(f"id >= {start_timestamp}")
-            except ValueError:
-                pass
-        if end_date_str:
-            try:
-                # End of day timestamp (23:59:59)
-                end_timestamp = int((_dt.datetime.strptime(end_date_str, "%Y-%m-%d") + _dt.timedelta(days=1) - _dt.timedelta(seconds=1)).timestamp() * 1000)
-                conditions.append(f"id <= {end_timestamp}")
-            except ValueError:
-                pass
+        if start_timestamp:
+            conditions.append(f"id >= {start_timestamp}")
+        if end_timestamp:
+            conditions.append(f"id <= {end_timestamp}")
         if conditions:
             date_filter_sql = " AND " + " AND ".join(conditions)
     
@@ -710,6 +607,8 @@ def time_studied_history(
     )
     if not rev_rows:
         return empty_result
+
+    bucketer = TimeBucketer(granularity)
 
     template_name_map = _get_template_name_map(model_id)
     card_template_map = {c.id: _get_template_key(c, model_id) for c in cards}
@@ -724,9 +623,9 @@ def time_studied_history(
             continue
 
         dt = _dt.datetime.fromtimestamp(rid / 1000.0)
-        bucket_date = _bucket_start(dt, granularity)
+        bucket_date = bucketer.bucket_start(dt)
         bucket_dates.add(bucket_date)
-        label = _label_from_date(bucket_date, granularity)
+        label = bucketer.label_from_date(bucket_date)
         seconds = max(0.0, (time_ms or 0) / 1000.0)
 
         template_buckets = time_per_template_bucket.setdefault(template_key, {})
@@ -741,14 +640,14 @@ def time_studied_history(
     # Only extend to today if no end date filter
     end_date_str = config.get_date_filter_end()
     if not end_date_str:
-        today_bucket = _bucket_start(_dt.datetime.now(), granularity)
+        today_bucket = bucketer.bucket_start(_dt.datetime.now())
         if dates_sorted and dates_sorted[-1] < today_bucket:
             current_date = dates_sorted[-1]
             while current_date < today_bucket:
-                current_date = _next_bucket(current_date, granularity)
+                current_date = bucketer.next_bucket(current_date)
                 dates_sorted.append(current_date)
 
-    labels = [_label_from_date(d, granularity) for d in dates_sorted]
+    labels = [bucketer.label_from_date(d) for d in dates_sorted]
     series: List[Dict[str, Any]] = []
     totals_seconds: Dict[str, float] = {}
 
