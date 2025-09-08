@@ -43,6 +43,11 @@ const app = {
     modelTemplates: "#modelTemplates",
     granularityRadios: '#granularityRadios input[type="radio"]',
     forecastToggle: "#forecastToggle",
+    startDate: "#startDate",
+    endDate: "#endDate",
+    clearStartDate: "#clearStartDate",
+    clearEndDate: "#clearEndDate",
+    applyDateFilter: "#applyDateFilter",
     streakContainer: "#streakContainer",
     streakDays: "#streakDays",
     statsChart: "#statsChart",
@@ -58,6 +63,7 @@ const app = {
     difficultTables: "#difficultTables",
     statusCharts: "#statusCharts",
     statusSection: "#statusSection",
+    floatingControls: "#floatingControls",
     timeStudiedSection: "#timeStudiedSection",
     timeStudiedChart: "#timeStudiedChart",
     timeStudiedSummary: "#timeStudiedSummary",
@@ -107,6 +113,74 @@ const app = {
       const currentModel = document.querySelector(this.el.currentModel);
       if (currentModel) {
         currentModel.addEventListener("click", () => this.anki.selectModel());
+      }
+
+      // Date filter event listeners - only apply when Apply button is clicked
+      const applyDateFilter = document.querySelector(this.el.applyDateFilter);
+      if (applyDateFilter) {
+        applyDateFilter.addEventListener("click", () => {
+          const startDateInput = document.querySelector(this.el.startDate);
+          const endDateInput = document.querySelector(this.el.endDate);
+          
+          const startValue = startDateInput ? startDateInput.value || null : null;
+          const endValue = endDateInput ? endDateInput.value || null : null;
+          
+          // Parse flexible dates
+          const parsedStartValue = startValue ? this.utils.parseFlexibleDate(startValue, true) : null;
+          const parsedEndValue = endValue ? this.utils.parseFlexibleDate(endValue, false) : null;
+          
+          // Update the input fields with parsed values
+          if (startDateInput && parsedStartValue && parsedStartValue !== startValue) {
+            startDateInput.value = parsedStartValue;
+          }
+          if (endDateInput && parsedEndValue && parsedEndValue !== endValue) {
+            endDateInput.value = parsedEndValue;
+          }
+          
+          this.anki.setDateFilters(parsedStartValue, parsedEndValue);
+        });
+      }
+
+      // Clear button event listeners
+      const clearStartDate = document.querySelector(this.el.clearStartDate);
+      if (clearStartDate) {
+        clearStartDate.addEventListener("click", () => {
+          const startDateInput = document.querySelector(this.el.startDate);
+          if (startDateInput) {
+            startDateInput.value = "";
+          }
+        });
+      }
+
+      const clearEndDate = document.querySelector(this.el.clearEndDate);
+      if (clearEndDate) {
+        clearEndDate.addEventListener("click", () => {
+          const endDateInput = document.querySelector(this.el.endDate);
+          if (endDateInput) {
+            endDateInput.value = "";
+          }
+        });
+      }
+
+      // Enter key support for date inputs
+      const startDate = document.querySelector(this.el.startDate);
+      if (startDate) {
+        startDate.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            applyDateFilter && applyDateFilter.click();
+          }
+        });
+      }
+
+      const endDate = document.querySelector(this.el.endDate);
+      if (endDate) {
+        endDate.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            applyDateFilter && applyDateFilter.click();
+          }
+        });
       }
     });
   },
@@ -158,6 +232,19 @@ const app = {
      */
     setForecast(enabled) {
       this.pycmd("deckcompletionstats_set_forecast:" + (enabled ? "1" : "0"));
+    },
+
+    /**
+     * @param {string|null} startDate
+     * @param {string|null} endDate
+     */
+    setDateFilters(startDate, endDate) {
+      this.pycmd(
+        "deckcompletionstats_set_date_filters:" + JSON.stringify({
+          start: startDate,
+          end: endDate
+        })
+      );
     },
   },
 
@@ -254,6 +341,22 @@ const app = {
       )
         .filter((cb) => cb.checked)
         .map((cb) => parseInt(cb.value, 10));
+    },
+
+    /**
+     * @param {string} startDate
+     * @param {string} endDate
+     */
+    updateDateFilters(startDate, endDate) {
+      const startEl = document.querySelector(app.el.startDate);
+      if (startEl) {
+        startEl.value = startDate || "";
+      }
+      
+      const endEl = document.querySelector(app.el.endDate);
+      if (endEl) {
+        endEl.value = endDate || "";
+      }
     },
 
     togglePill() {
@@ -1122,6 +1225,62 @@ const app = {
    */
   utils: {
     /**
+     * Parse flexible date input and return ISO format date.
+     * @param {string} dateStr - Input date string
+     * @param {boolean} defaultToStart - Whether to default to start (true) or end (false) of period
+     * @returns {string|null} ISO format date or null
+     */
+    parseFlexibleDate(dateStr, defaultToStart = true) {
+      if (!dateStr) return null;
+      
+      dateStr = dateStr.trim();
+      
+      // If already in ISO format, return as-is
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        return dateStr;
+      }
+      
+      // Handle different formats
+      if (/^\d{4}$/.test(dateStr)) {  // Just year: "2024"
+        const year = dateStr;
+        if (defaultToStart) {
+          return `${year}-01-01`;
+        } else {
+          return `${year}-12-31`;
+        }
+      } else if (/^\d{1,2}\.\d{4}$/.test(dateStr)) {  // Month.Year: "01.2024"
+        const parts = dateStr.split('.');
+        const month = parts[0].padStart(2, '0');
+        const year = parts[1];
+        if (defaultToStart) {
+          return `${year}-${month}-01`;
+        } else {
+          // Get last day of month
+          const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+          return `${year}-${month}-${lastDay.toString().padStart(2, '0')}`;
+        }
+      } else if (/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(dateStr)) {  // DD.MM.YYYY: "01.01.2024"
+        const parts = dateStr.split('.');
+        const day = parts[0].padStart(2, '0');
+        const month = parts[1].padStart(2, '0');
+        const year = parts[2];
+        return `${year}-${month}-${day}`;
+      }
+      
+      // If no pattern matches, try to parse as-is
+      try {
+        const date = new Date(dateStr);
+        if (!isNaN(date.getTime())) {
+          return date.toISOString().split('T')[0];
+        }
+      } catch (e) {
+        // Ignore parsing errors
+      }
+      
+      return null;
+    },
+
+    /**
      * @param {string} iso
      * @returns {string}
      */
@@ -1194,6 +1353,9 @@ const app = {
     const fcToggle = document.querySelector(this.el.forecastToggle);
     if (fcToggle && typeof s.forecastEnabled === "boolean")
       fcToggle.checked = s.forecastEnabled;
+
+    // Update date filters
+    this.ui.updateDateFilters(s.dateFilterStart, s.dateFilterEnd);
 
     if (typeof s.streak === "number") {
       const sc = document.querySelector(this.el.streakContainer);

@@ -591,7 +591,6 @@ h1 {
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   padding: 0.85rem 1.05rem 0.95rem;
   border-radius: var(--radius-xl);
-  max-width: 92%;
   width: auto;
   z-index: 999;
   font-size: 0.62rem;
@@ -658,7 +657,6 @@ h1 {
 .floating-pill #granularityRadios {
   display: flex;
   gap: 0.45rem;
-  flex-wrap: wrap;
   justify-content: center;
   width: 100%;
 }
@@ -844,6 +842,128 @@ h1 {
   font-size: 0.55rem;
   font-weight: 600;
   letter-spacing: 0.5px;
+}
+
+/* Date Filter Styles */
+.date-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.pill-group.date-filter-group {
+  gap: 0.25rem;
+}
+
+.date-filter-row {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.date-input-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.date-input {
+  background: var(--bg-interactive);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-small);
+  padding: 0.25rem 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  width: 110px;
+  height: 28px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  padding-right: 18px; /* Make room for clear button */
+  box-sizing: border-box;
+}
+
+.date-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  background: var(--bg-interactive-hover);
+}
+
+.date-input::-webkit-calendar-picker-indicator {
+  display: none; /* Hide calendar icon for text inputs */
+}
+
+.clear-date-btn {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  width: 12px;
+  height: 12px;
+  border-radius: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+  line-height: 1;
+  font-weight: normal;
+  z-index: 2;
+  padding: 0;
+}
+
+.clear-date-btn:hover {
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+}
+
+.clear-date-btn:active {
+  color: var(--accent-blue);
+  background: transparent;
+  border: none;
+}
+
+.apply-date-btn {
+  background: var(--bg-interactive);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+  font-size: 0.6rem;
+  font-weight: normal;
+  padding: 0.3rem 0.55rem;
+  border-radius: var(--radius-medium);
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: nowrap;
+  margin-left: 0.3rem;
+  height: auto;
+  width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.apply-date-btn:hover {
+  background: var(--bg-interactive-hover);
+}
+
+.apply-date-btn:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  background: var(--bg-interactive-hover);
+}
+
+.apply-date-btn:active {
+  transform: translateY(0);
 }
 
 /* Generic Wrappers (used by pill and potentially elsewhere) */

@@ -102,6 +102,8 @@ def build_state_json() -> str:
         "modelName": model_name(config.get_selected_model_id()),
         "granularity": config.get_granularity(),
         "streak": streak_days(config.get_selected_deck_id()),
+        "dateFilterStart": config.get_date_filter_start(),
+        "dateFilterEnd": config.get_date_filter_end(),
     }
 
     mid = config.get_selected_model_id()
@@ -309,6 +311,16 @@ def on_js_message(
     elif command == "deckcompletionstats_set_forecast":
         if payload_str:
             config.set_forecast_enabled(payload_str == "1")
+    elif command == "deckcompletionstats_set_date_filters":
+        try:
+            date_filters = json.loads(payload_str)
+            if isinstance(date_filters, dict):
+                start_date = date_filters.get("start") or None
+                end_date = date_filters.get("end") or None
+                config.set_date_filter_start(start_date)
+                config.set_date_filter_end(end_date)
+        except (json.JSONDecodeError, TypeError):
+            pass  # Ignore malformed messages
 
     # Refresh the webview after any action
     if dlg:

@@ -115,6 +115,20 @@
           <label class="granularity-radio"><input type="radio" name="granularity" value="years">Years</label>
         </div>
       </div>
+            <div class="pill-group date-filter-group">
+        <div class="pill-label">Date Range</div>
+        <div class="date-filter-row">
+          <div class="date-input-wrapper">
+            <input type="text" id="startDate" class="date-input" placeholder="yyyy(-mm-dd)" tabindex="1">
+            <button type="button" class="clear-date-btn" id="clearStartDate" title="Clear start date">×</button>
+          </div>
+          <div class="date-input-wrapper">
+            <input type="text" id="endDate" class="date-input" placeholder="yyyy(-mm-dd)" tabindex="2">
+            <button type="button" class="clear-date-btn" id="clearEndDate" title="Clear end date">×</button>
+          </div>
+          <button type="button" class="apply-date-btn" id="applyDateFilter" title="Apply date filter" tabindex="3">Apply</button>
+        </div>
+      </div>
       <div class="pill-group templates-group">
         <div class="pill-label">Card Types</div>
         <div id="modelTemplates" class="templates-wrap"></div>

@@ -21,6 +21,8 @@ def get_config() -> dict[str, Any]:
     cfg.setdefault("selected_model_templates", None)
     cfg.setdefault("granularity", "days")
     cfg.setdefault("progress_forecast_enabled", False)
+    cfg.setdefault("date_filter_start", None)
+    cfg.setdefault("date_filter_end", None)
     return cfg
 
 
@@ -143,4 +145,48 @@ def set_forecast_enabled(on: bool) -> None:
     """
     cfg = get_config()
     cfg["progress_forecast_enabled"] = on
+    set_config(cfg)
+
+
+def get_date_filter_start() -> Optional[str]:
+    """
+    Gets the start date filter from the configuration.
+
+    Returns:
+        The start date as ISO string (YYYY-MM-DD), or None if not set.
+    """
+    return get_config().get("date_filter_start")
+
+
+def set_date_filter_start(date_str: Optional[str]) -> None:
+    """
+    Sets the start date filter in the configuration.
+
+    Args:
+        date_str: The start date as ISO string (YYYY-MM-DD), or None to clear.
+    """
+    cfg = get_config()
+    cfg["date_filter_start"] = date_str
+    set_config(cfg)
+
+
+def get_date_filter_end() -> Optional[str]:
+    """
+    Gets the end date filter from the configuration.
+
+    Returns:
+        The end date as ISO string (YYYY-MM-DD), or None if not set.
+    """
+    return get_config().get("date_filter_end")
+
+
+def set_date_filter_end(date_str: Optional[str]) -> None:
+    """
+    Sets the end date filter in the configuration.
+
+    Args:
+        date_str: The end date as ISO string (YYYY-MM-DD), or None to clear.
+    """
+    cfg = get_config()
+    cfg["date_filter_end"] = date_str
     set_config(cfg)

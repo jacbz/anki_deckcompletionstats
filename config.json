@@ -3,5 +3,7 @@
   "selected_model_id": null,
   "selected_model_templates": null,
   "granularity": "weeks",
-  "progress_forecast_enabled": false
+  "progress_forecast_enabled": false,
+  "date_filter_start": null,
+  "date_filter_end": null
 }

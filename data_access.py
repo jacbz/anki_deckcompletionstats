@@ -13,6 +13,8 @@ from anki.decks import DeckId
 from anki.models import NotetypeId
 from aqt import mw
 
+from . import config
+
 
 def deck_card_count(deck_id: Optional[int]) -> int:
     """Return the total number of cards in a given deck, or all decks."""
@@ -245,19 +247,43 @@ class _TimeBucketer:
 
 def _calculate_historic_progress(
     cards: list[Card], first_map: dict[int, int], bucketer: _TimeBucketer, model_id: Optional[int] = None
-) -> tuple[dict, dict, list, list]:
+) -> tuple[dict, dict, list, list, dict]:
     """Aggregate historical card study counts into time buckets."""
     per_template_counts: Dict[int, Dict[str, int]] = {}
-    template_total_cards: Dict[int, int] = {}
+    template_total_cards: Dict[int, int] = {}  # This should be ALL cards
+    template_pre_filter_counts: Dict[int, int] = {}  # Cards studied before start date
     bucket_dates_set: set[_dt.date] = set()
 
+    # Get date filter settings
+    start_date_str = config.get_date_filter_start()
+    end_date_str = config.get_date_filter_end()
+    start_date = _dt.datetime.strptime(start_date_str, "%Y-%m-%d").date() if start_date_str else None
+    end_date = _dt.datetime.strptime(end_date_str, "%Y-%m-%d").date() if end_date_str else None
+
+    # First pass: count ALL cards (regardless of review status or date filter)
     for c in cards:
         template_key = _get_template_key(c, model_id)
         template_total_cards[template_key] = template_total_cards.get(template_key, 0) + 1
+
+    # Second pass: only process reviewed cards and apply date filtering
+    for c in cards:
+        template_key = _get_template_key(c, model_id)
         rid = first_map.get(c.id)
         if not rid:
             continue  # not studied yet
+            
         dt = _dt.datetime.fromtimestamp(rid / 1000)
+        review_date = dt.date()
+        
+        # Count cards studied before the start date (for cumulative baseline)
+        if start_date and review_date < start_date:
+            template_pre_filter_counts[template_key] = template_pre_filter_counts.get(template_key, 0) + 1
+            continue
+            
+        # Only include reviews within the date filter range
+        if end_date and review_date > end_date:
+            continue
+        
         bdate = bucketer.bucket_start(dt)
         bucket_dates_set.add(bdate)
         label = bucketer.label_from_date(bdate)
@@ -265,18 +291,33 @@ def _calculate_historic_progress(
         tdict[label] = tdict.get(label, 0) + 1
 
     if not bucket_dates_set:
-        return {}, {}, [], []
+        # If no data in the filtered range, but we have pre-filter data, 
+        # create a minimal structure
+        if template_pre_filter_counts:
+            # Create a single bucket at the start date if we have one
+            if start_date:
+                start_bucket = bucketer.bucket_start(_dt.datetime.combine(start_date, _dt.time.min))
+                bucket_dates_set.add(start_bucket)
+            else:
+                # No start date filter, so no data period
+                return {}, template_total_cards, [], [], {}
+        else:
+            return {}, template_total_cards, [], [], {}
 
     historic_dates = sorted(bucket_dates_set)
-    today_bucket = bucketer.bucket_start(_dt.datetime.now())
-    if historic_dates and historic_dates[-1] < today_bucket:
-        cur_ext = historic_dates[-1]
-        while cur_ext < today_bucket:
-            cur_ext = bucketer.next_bucket(cur_ext)
-            historic_dates.append(cur_ext)
+    
+    # Only extend to today if there's no end date filter
+    if not end_date:
+        today_bucket = bucketer.bucket_start(_dt.datetime.now())
+        if historic_dates and historic_dates[-1] < today_bucket:
+            cur_ext = historic_dates[-1]
+            while cur_ext < today_bucket:
+                cur_ext = bucketer.next_bucket(cur_ext)
+                historic_dates.append(cur_ext)
+    
     historic_labels = [bucketer.label_from_date(d) for d in historic_dates]
 
-    return per_template_counts, template_total_cards, historic_dates, historic_labels
+    return per_template_counts, template_total_cards, historic_dates, historic_labels, template_pre_filter_counts
 
 
 def _calculate_forecast(
@@ -409,6 +450,7 @@ def template_progress(
         template_total_cards,
         historic_dates,
         historic_labels,
+        template_pre_filter_counts,
     ) = _calculate_historic_progress(cards, first_map, bucketer, model_id)
 
     if not historic_dates:
@@ -464,7 +506,8 @@ def template_progress(
 
     # Now, build the final series data
     for ord_, total_cards in template_total_cards.items():
-        running = 0
+        # Start with cards studied before the date filter (if any)
+        running = template_pre_filter_counts.get(ord_, 0)
         hist_data: list[int] = []
         for lab in historic_labels:
             running += per_template_counts.get(ord_, {}).get(lab, 0)
