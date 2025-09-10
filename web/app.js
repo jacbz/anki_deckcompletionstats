@@ -487,7 +487,7 @@ const app = {
             },
             y: {
               stacked: targetId === "learningHistoryChart",
-              ticks: { color: "#9aa2ab" },
+              ticks: { color: "#9aa2ab", precision: 0 },
               grid: { color: "#30363d" },
               title:
                 targetId === "learningHistoryChart"
@@ -614,7 +614,7 @@ const app = {
             grid: { color: "#30363d" },
           },
           y: {
-            ticks: { color: "#9aa2ab" },
+            ticks: { color: "#9aa2ab", precision: 0 },
             grid: { color: "#30363d" },
             suggestedMax: globalMax,
             max: globalMax,
@@ -697,7 +697,7 @@ const app = {
                 grid: { color: "#30363d" },
               },
               y: {
-                ticks: { color: "#9aa2ab", font: { size: 9 } },
+                ticks: { color: "#9aa2ab", font: { size: 9 }, precision: 0 },
                 grid: { color: "#30363d" },
                 suggestedMax: globalMax,
                 max: globalMax,
@@ -710,6 +710,25 @@ const app = {
               },
             },
           },
+          plugins: [{
+            afterDatasetsDraw: function(chart, args, options) {
+              const ctx = chart.ctx;
+              const meta = chart.getDatasetMeta(0);
+              meta.data.forEach((bar, index) => {
+                const value = chart.data.datasets[0].data[index];
+                if (value > 0) {
+                  ctx.save();
+                  ctx.fillStyle = '#e6edf3';
+                  ctx.font = '8px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+                  ctx.textAlign = 'center';
+                  const x = bar.x;
+                  const y = bar.y - 5;
+                  ctx.fillText(value, x, y);
+                  ctx.restore();
+                }
+              });
+            }
+          }],
         };
         app.charts.timeHist[ord] = new Chart(cv, cfg);
       });
@@ -813,7 +832,7 @@ const app = {
                 },
               },
               y: {
-                ticks: { color: "#9aa2ab", font: { size: 9 } },
+                ticks: { color: "#9aa2ab", font: { size: 9 }, precision: 0 },
                 grid: { color: "#30363d" },
                 title: {
                   display: true,
@@ -824,6 +843,25 @@ const app = {
               },
             },
           },
+          plugins: [{
+            afterDatasetsDraw: function(chart, args, options) {
+              const ctx = chart.ctx;
+              const meta = chart.getDatasetMeta(0);
+              meta.data.forEach((bar, index) => {
+                const value = chart.data.datasets[0].data[index];
+                if (value > 0) {
+                  ctx.save();
+                  ctx.fillStyle = '#e6edf3';
+                  ctx.font = '8px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+                  ctx.textAlign = 'center';
+                  const x = bar.x;
+                  const y = bar.y - 5;
+                  ctx.fillText(value, x, y);
+                  ctx.restore();
+                }
+              });
+            }
+          }],
         };
         new Chart(cv, cfg);
       });
